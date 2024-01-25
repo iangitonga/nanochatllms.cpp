@@ -407,7 +407,7 @@ Examples:
 int main(int argc, char const *argv[])
 {
     Dtype model_dtype = kQint8;
-    std::string model_path = "models/zephyr1_6b.fp16.gten";
+    std::string model_path = "models/zephyr1_6b.q8.gten";
     std::string prompt = "";
     int n_predict = 768;
     bool use_greedy_sampler = false;
@@ -526,7 +526,7 @@ int main(int argc, char const *argv[])
     GTEN_ASSERT(checkpoint.is_open());
 
     ModuleDtype dtype = {.wdtype = model_dtype, .adtype = kQint8};
-    
+
     Zephyr1_6b model{n_predict, dtype};
     model.load_from_ckpt(checkpoint);
 
