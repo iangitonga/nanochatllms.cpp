@@ -626,6 +626,7 @@ static void layer_norm(const Tensor& inp, const Tensor& weight, const Tensor& bi
     GTEN_ASSERT(weight.dimsize(0) == inp.dimsize(1));
     GTEN_ASSERT(inp.is_2d());
     GTEN_ASSERT(weight.is_1d() && weight.dtype() == kFloat16);
+    GTEN_ASSERT(bias.is_1d() && bias.dtype() == kFloat16);
     GTEN_ASSERT(inp.shape_eq(out.shape()));
 
     const char* inp_data = inp.data_ptr<char>();

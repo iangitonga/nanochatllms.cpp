@@ -391,8 +391,7 @@ USAGE:
 ./zephyr [options] for a chat interface. 
 
 Optional args:
--f16 :     Use float-16 model and inference (3GB). [default]
--q8  :     Use 8-bit quantized model (1.6GB).
+-q8  :     Use 8-bit quantized model (1.6GB) [default].
 -q4  :     Use 4-bit quantized model (0.9GB).
 -showstat : Show inference performance stats.
 --temp T : Temperature to use during sampling. It must be greater than 0. [default=0.9].
@@ -407,7 +406,7 @@ Examples:
 
 int main(int argc, char const *argv[])
 {
-    Dtype model_dtype = kFloat16;
+    Dtype model_dtype = kQint8;
     std::string model_path = "models/zephyr1_6b.fp16.gten";
     std::string prompt = "";
     int n_predict = 768;
@@ -422,9 +421,6 @@ int main(int argc, char const *argv[])
         if (arg == "--help" || arg == "-h") {
             std::cout << usage_message << "\n";
             return 0;
-        }
-        if (arg == "-f16") {
-            continue;
         }
         else if (arg == "-q8") {
             model_dtype = kQint8;
@@ -510,9 +506,7 @@ int main(int argc, char const *argv[])
     
 
     std::string model_id;
-    if (model_dtype == kFloat16) {
-        model_id = "fp16";
-    } else if (model_dtype == kQint4) {
+    if (model_dtype == kQint4) {
         model_id = "q4";
     } else if (model_dtype == kQint8) {
         model_id = "q8";
@@ -531,15 +525,8 @@ int main(int argc, char const *argv[])
     std::ifstream checkpoint{model_path, std::ios::binary};
     GTEN_ASSERT(checkpoint.is_open());
 
-    ModuleDtype dtype;
-    if (model_dtype == kFloat16) {
-        dtype.wdtype = kFloat16;
-        dtype.adtype = kFloat16;
-    } else {
-        dtype.wdtype = model_dtype;
-        dtype.adtype = kQint8;
-    }
-
+    ModuleDtype dtype = {.wdtype = model_dtype, .adtype = kQint8};
+    
     Zephyr1_6b model{n_predict, dtype};
     model.load_from_ckpt(checkpoint);
 

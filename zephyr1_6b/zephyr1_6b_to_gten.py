@@ -214,7 +214,6 @@ def convert_model_to_gten(model_path, dtype):
         
         print("Converting norm")
         write_layer(fout, "model.norm.weight", w0=ckpt["model.norm.weight"], dtype="fp16")
-        print("Converting norm")
         write_layer(fout, "model.norm.bias", w0=ckpt["model.norm.bias"], dtype="fp16")
 
         print("Converting lm_head")
