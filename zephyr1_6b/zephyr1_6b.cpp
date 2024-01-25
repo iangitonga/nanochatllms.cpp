@@ -66,6 +66,7 @@ public:
     }
 
     void load_from_ckpt(std::ifstream& ckpt);
+    void print_perf(const int n_pred_tokens);
 
 private:
     Embedding tok_emb_;
@@ -185,8 +186,79 @@ void Zephyr1_6b::load_from_ckpt(std::ifstream &ckpt)
     read_into_weight(ckpt, lm_head_.weight, dtype_);
 }
 
+void Zephyr1_6b::print_perf(const int n_pred_tokens)
+{
+    int64_t linear_time = 0;
+    int64_t attn_time = 0;
+    int64_t non_linear_time = 0;
 
-void greedy_sample(const std::string& prompt, Zephyr1_6b& model, BPETokenizer& tokenizer)
+    {
+        const int64_t emb_time = tok_emb_.exec_time;
+        int64_t norm_time = norm_.exec_time;
+        int64_t res_time = 0;
+        int64_t rope_time = 0;
+        int64_t activ_time = 0;
+        int64_t mul_time = 0;
+        linear_time += lm_head_.exec_time;
+
+        for (const auto& b : blocks_) {
+            norm_time += b.attn_norm.exec_time + b.ffn_norm.exec_time;
+            attn_time += b.attn.exec_time_attn;
+            res_time  += b.attn_res.exec_time + b.inp_res.exec_time;
+            rope_time += b.attn.q_rope.exec_time + b.attn.k_rope.exec_time;
+            activ_time += b.ffn_norm.exec_time;
+            mul_time  += b.ffn_mul.exec_time;
+            linear_time += b.attn.query.exec_time + b.attn.key.exec_time + b.attn.value.exec_time + b.attn.qkv_proj.exec_time;
+            linear_time += b.ffn_gate_proj.exec_time + b.ffn_up_proj.exec_time + b.ffn_down_proj.exec_time;
+        }
+
+        non_linear_time = norm_time + res_time + rope_time + activ_time + mul_time;
+    }
+    const int64_t tot_inf_time = linear_time + attn_time + non_linear_time;
+
+    const int64_t tensor_mem = G_TensorMemAllocated;
+    int64_t weights_mem = 0;
+
+    {
+        const auto bytes = [](const Tensor& t) { return t.nbytes(); };
+
+        weights_mem += bytes(tok_emb_.weight);
+        weights_mem += bytes(norm_.weight) + bytes(norm_.bias);
+        weights_mem += bytes(lm_head_.weight);
+
+        for (const auto& b : blocks_) {
+            weights_mem += bytes(b.attn_norm.weight) + bytes(b.attn_norm.bias) + bytes(b.ffn_norm.weight) + bytes(b.ffn_norm.bias);
+            weights_mem += bytes(b.attn.query.weight) + bytes(b.attn.key.weight) + bytes(b.attn.value.weight) + bytes(b.attn.qkv_proj.weight);
+            weights_mem += bytes(b.attn.query.bias) + bytes(b.attn.key.bias) + bytes(b.attn.value.bias);
+            weights_mem += bytes(b.ffn_gate_proj.weight) + bytes(b.ffn_up_proj.weight) + bytes(b.ffn_down_proj.weight);
+        }
+    }
+
+    const int acv_mem = tensor_mem - weights_mem;
+
+
+    std::cout << "\n-------------------------------\n";
+    std::cout << " " << "PERFORMANCE\n";
+    std::cout << "-------------------------------\n";
+    std::cout << " " << "Throughput [tok/s]  : " << std::setw(5) << 1000.0f / (float)(tot_inf_time/n_pred_tokens) << "\n";
+    std::cout << " " << "Inference [per tok] : " << std::setw(5) << tot_inf_time/n_pred_tokens << "ms\n";
+    std::cout << " " << "Sample time         : " << std::setw(5) << sample_time << "ms\n";
+    std::cout << " " << "Load time           : " << std::setw(5) << load_time << "ms\n";
+    std::cout << " " << "Inference [total]   : " << std::setw(5) << tot_inf_time << "ms\n";
+    std::cout << " " << "Total runtime       : " << std::setw(5) << load_time + sample_time + tot_inf_time << "ms\n";
+    std::cout << "-------------------------------\n";
+    std::cout << " " << "Mem usage [total]   : " << std::setw(4) << tensor_mem/1000000 << "MB\n";
+    std::cout << " " << "Mem usage [model]   : " << std::setw(4) << weights_mem/1000000 << "MB\n";
+    std::cout << " " << "Mem usage [actvs]   : " << std::setw(4) << acv_mem/1000000 << "MB\n";
+    std::cout << "-------------------------------\n";
+    std::cout << " " << "Lin time [per tok]  : " << std::setw(5) << linear_time/n_pred_tokens << "ms\n";
+    std::cout << " " << "Attn time [per tok] : " << std::setw(5) << attn_time/n_pred_tokens << "ms\n";
+    std::cout << " " << "Other     [per tok] : " << std::setw(5) << non_linear_time/n_pred_tokens << "ms\n";
+    std::cout << "-------------------------------\n\n";
+}
+
+
+void greedy_sample(const std::string& prompt, Zephyr1_6b& model, BPETokenizer& tokenizer, bool showstat)
 {
     const int n_predict = model.n_ctx_;
     std::vector<int> tokens = tokenizer.encode(prompt);
@@ -231,10 +303,12 @@ void greedy_sample(const std::string& prompt, Zephyr1_6b& model, BPETokenizer& t
     
     std::cerr << '\n';
 
-    // model.print_perf(n_iters);
+    if (showstat) {
+        model.print_perf(n_iters);
+    }
 }
 
-void topk_sample(const std::string& prompt, Zephyr1_6b& model, BPETokenizer& tokenizer, const float temp, const int top_k)
+void topk_sample(const std::string& prompt, Zephyr1_6b& model, BPETokenizer& tokenizer, const float temp, const int top_k, bool showstat)
 {
     const int n_predict = model.n_ctx_;
 
@@ -248,8 +322,10 @@ void topk_sample(const std::string& prompt, Zephyr1_6b& model, BPETokenizer& tok
     logits_probs.reserve(logits_size);
 
     const int n_pred_tokens = n_predict - tokens.size();
+    int n_iters = 0;
     for (int i = 0; i < n_pred_tokens; i++)
     {
+        n_iters += 1;
         gten::Tensor input{tokens.data(), {(int)tokens.size()}, gten::kInt32};
         const int start_pos = (i == 0) ? 0 : input.numel() - 1; 
         gten::Tensor logits = model.logits(input, start_pos);
@@ -302,6 +378,10 @@ void topk_sample(const std::string& prompt, Zephyr1_6b& model, BPETokenizer& tok
     }
 
     std::cerr << "\n";
+
+    if (showstat) {
+        model.print_perf(n_iters);
+    }
 }
 
 
@@ -314,6 +394,7 @@ Optional args:
 -f16 :     Use float-16 model and inference (3GB). [default]
 -q8  :     Use 8-bit quantized model (1.6GB).
 -q4  :     Use 4-bit quantized model (0.9GB).
+-showstat : Show inference performance stats.
 --temp T : Temperature to use during sampling. It must be greater than 0. [default=0.9].
 --npred  N : Number of tokens to generate. Minimum is 1 and max is 4096. [default=768].
 --topk K : Top tokens to randomly select from during prediction. [default=40].
@@ -333,6 +414,7 @@ int main(int argc, char const *argv[])
     bool use_greedy_sampler = false;
     float sampling_temp = 0.9f;
     int topk = 50;
+    bool showstat = false;
 
     for (int i = 1; i < argc; i++)
     {
@@ -362,7 +444,9 @@ int main(int argc, char const *argv[])
             }
         } else if (arg == "-greedy") {
            use_greedy_sampler = true;
-        } else if (arg == "--npred") {
+        } else if (arg == "-showstat") {
+           showstat = true;
+        }  else if (arg == "--npred") {
             if (argc <= i+1) {
                 std::cerr << "npred value is missing.\n";
                 return -1;
@@ -472,17 +556,17 @@ int main(int argc, char const *argv[])
 
             std::cerr << "\n[Zephyr1.6b]: \n\n";
             if (use_greedy_sampler) {
-                greedy_sample(prompt, model, tokenizer);
+                greedy_sample(prompt, model, tokenizer, showstat);
             } else {
-                topk_sample(prompt, model, tokenizer, sampling_temp, topk);
+                topk_sample(prompt, model, tokenizer, sampling_temp, topk, showstat);
             }
         }
     }
     else {
         if (use_greedy_sampler) {
-            greedy_sample(prompt, model, tokenizer);
+            greedy_sample(prompt, model, tokenizer, showstat);
         } else {
-            topk_sample(prompt, model, tokenizer, sampling_temp, topk);
+            topk_sample(prompt, model, tokenizer, sampling_temp, topk, showstat);
         }
     }
 

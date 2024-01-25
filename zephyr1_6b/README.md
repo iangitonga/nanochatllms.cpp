@@ -1,7 +1,7 @@
 # zephyr1_6b
 
 **zephyr1_6b** is an implementation of [zephyr1_6b](https://huggingface.co/stabilityai/stablelm-2-zephyr-1_6b).
-Supported formats are FP16 (3GBGB), 8-bit (1.6GB) and 4-bit (0.9GB).
+Supported formats are FP16 (3GB), 8-bit (1.6GB) and 4-bit (0.9GB).
 
 ## Install and Chat with zephyr1_6b.
 ```

@@ -77,9 +77,9 @@ public:
 
 
 void greedy_sample(
-    std::string& prompt, TinyLlama& model, Tokenizer& tokenizer, const int n_predict);
+    std::string& prompt, TinyLlama& model, Tokenizer& tokenizer, const int n_predict, bool showstat);
 void topk_sample(
-    std::string& prompt, TinyLlama& model, Tokenizer& tokenizer, const int n_predict, const float temp, const int topk);
+    std::string& prompt, TinyLlama& model, Tokenizer& tokenizer, const int n_predict, const float temp, const int topk, bool showstat);
 
 
 /*
@@ -120,9 +120,10 @@ Optional args.
 -f16 :     Use float-16 model and inference (2.2GB). [default]
 -q8  :     Use 8-bit quantized model (1.1GB).
 -q4  :     Use 4-bit quantized model (0.62GB).
---temp T : Temperature to use during sampling. It must be greater than 0. [default=0.9].
+-showstat  : Show inference performance stats.
+--temp T   : Temperature to use during sampling. It must be greater than 0. [default=0.9].
 --npred  N : Number of tokens to generate. Minimum is 1 and max is 2048. [default=512].
---topk K : Top tokens to randomly select from during prediction. [default=40].
+--topk K   : Top tokens to randomly select from during prediction. [default=40].
 
 Examples:
   ./tinyllama
@@ -141,6 +142,7 @@ int main(int argc, char const *argv[])
     bool use_greedy_sampler = false;
     float sampling_temp = 0.9f;
     int topk = 50;
+    bool showstat = false;
 
     for (int i = 1; i < argc; i++)
     {
@@ -170,6 +172,8 @@ int main(int argc, char const *argv[])
             }
         } else if (arg == "-greedy") {
            use_greedy_sampler = true;
+        } else if (arg == "-showstat") {
+           showstat = true;
         } else if (arg == "--npred") {
             if (argc <= i+1) {
                 std::cerr << "npred value is missing.\n";
@@ -280,17 +284,17 @@ int main(int argc, char const *argv[])
 
             std::cerr << "\n[Tinyllama-Chat]: \n\n";
             if (use_greedy_sampler) {
-                greedy_sample(prompt, model, tokenizer, n_predict);
+                greedy_sample(prompt, model, tokenizer, n_predict, showstat);
             } else {
-                topk_sample(prompt, model, tokenizer, n_predict, sampling_temp, topk);
+                topk_sample(prompt, model, tokenizer, n_predict, sampling_temp, topk, showstat);
             }
         }
     }
     else {
         if (use_greedy_sampler) {
-            greedy_sample(prompt, model, tokenizer, n_predict);
+            greedy_sample(prompt, model, tokenizer, n_predict, showstat);
         } else {
-            topk_sample(prompt, model, tokenizer, n_predict, sampling_temp, topk);
+            topk_sample(prompt, model, tokenizer, n_predict, sampling_temp, topk, showstat);
         }
     }
 
@@ -392,7 +396,7 @@ void TinyLlama::load_from_ckpt(std::ifstream &ckpt)
 }
 
 
-void greedy_sample(std::string& prompt, TinyLlama& model, Tokenizer& tokenizer, const int n_predict)
+void greedy_sample(std::string& prompt, TinyLlama& model, Tokenizer& tokenizer, const int n_predict, bool showstat)
 {
     std::vector<int> tokens = tokenizer.encode(prompt);
     tokens.reserve(n_predict);
@@ -436,10 +440,12 @@ void greedy_sample(std::string& prompt, TinyLlama& model, Tokenizer& tokenizer, 
     
     std::cerr << '\n';
 
-    model.print_perf(n_iters);
+    if (showstat) {
+        model.print_perf(n_iters);
+    }
 }
 
-void topk_sample(std::string& prompt, TinyLlama& model, Tokenizer& tokenizer, const int n_predict, const float temp, const int top_k)
+void topk_sample(std::string& prompt, TinyLlama& model, Tokenizer& tokenizer, const int n_predict, const float temp, const int top_k, bool showstat)
 {
     std::random_device rd;
     std::mt19937 gen(rd());
@@ -453,8 +459,10 @@ void topk_sample(std::string& prompt, TinyLlama& model, Tokenizer& tokenizer, co
     const int eot_token = tokenizer.eos;
 
     const int n_pred_tokens = n_predict - tokens.size();
+    int n_iters = 0;
     for (int i = 0; i < n_pred_tokens; i++)
     {
+        n_iters += 1;
         gten::Tensor input{tokens.data(), {(int)tokens.size()}, gten::kInt32};
         const int start_pos = (i == 0) ? 0 : input.numel() - 1; 
         gten::Tensor logits = model.logits(input, start_pos);
@@ -509,6 +517,10 @@ void topk_sample(std::string& prompt, TinyLlama& model, Tokenizer& tokenizer, co
     }
 
     std::cerr << "\n";
+
+    if (showstat) {
+        model.print_perf(n_iters);
+    }
 }
 
 
@@ -565,6 +577,7 @@ void TinyLlama::print_perf(const int n_pred_tokens)
     std::cout << "\n-------------------------------\n";
     std::cout << " " << "PERFORMANCE\n";
     std::cout << "-------------------------------\n";
+    std::cout << " " << "Throughput [tok/s]  : " << std::setw(5) << 1000.0f / (float)(tot_inf_time/n_pred_tokens) << "\n";
     std::cout << " " << "Inference [per tok] : " << std::setw(5) << tot_inf_time/n_pred_tokens << "ms\n";
     std::cout << " " << "Sample time         : " << std::setw(5) << sample_time << "ms\n";
     std::cout << " " << "Load time           : " << std::setw(5) << load_time << "ms\n";
