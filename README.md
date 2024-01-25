@@ -18,7 +18,7 @@ two cores.
 
 | Model | Format | Model size | Performance (tokens/sec) |
 | ----- | ------ | ---------- | ------------------------ |
-|            | Q8   | 1.75 GB |  5.2                     |
+| Zephyr1.6b | Q8   | 1.75 GB |  5.2                     |
 |            | Q4   | 0.92 GB |  5.58                    |
 | TinyLlama1.1B | FP16 | 2.2 GB  |  6.3                  |
 |               | Q8   | 1.17 GB |  8.7                  |
