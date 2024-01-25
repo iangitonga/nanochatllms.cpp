@@ -7,17 +7,20 @@ implemented in fp16, 8-bit and 4-bit formats. This project was inspired by
 [llama.cpp](https://github.com/ggerganov/llama.cpp) and [llama.c](https://github.com/karpathy/llama2.c)
 
 ## Implemented models
-1. TinyLlama-1.1B-Chat-v0.4
-2. Zephyr1.6B
+1. Zephyr1.6B
+2. TinyLlama-1.1B-Chat-v0.4
 
 
 ## Metrics
 
+**Note:** Performance was recorded on a Intel(R) Xeon(R) CPU @ 2.20GHz with
+two cores.
+
 | Model | Format | Model size | Performance (tokens/sec) |
 | ----- | ------ | ---------- | ------------------------ |
-| Zephyr1.6b | FP16 | 3.29 GB |  10                      |
-|            | Q8   | 1.75 GB |  10                      |
-|            | Q4   | 0.92 GB |  10                      |
-| TinyLlama1.1B | FP16 | 2.2 GB  |  10                   |
-|               | Q8   | 1.17 GB |  10                   |
-|               | Q4   | 0.6 GB  |  10                   |
+| Zephyr1.6b | FP16 | 3.29 GB |  4.2                     |
+|            | Q8   | 1.75 GB |  5.2                     |
+|            | Q4   | 0.92 GB |  5.58                    |
+| TinyLlama1.1B | FP16 | 2.2 GB  |  6.3                  |
+|               | Q8   | 1.17 GB |  8.7                  |
+|               | Q4   | 0.6 GB  |  9.1                  |
