@@ -190,7 +190,7 @@ int main(int argc, char const *argv[])
                 std::cerr << "npred must be greater than 1 and less than 2048.\n";
                 return -1;
             }
-            n_predict = npred, 2048;
+            n_predict = npred;
             i += 1; // skip len param
         } else if (arg == "--temp") {
             if (argc <= i+1) {
