@@ -25,6 +25,38 @@ Tensor Embedding::forward(const Tensor& tokens, const int start_pos) {
     return emb_acv;
 }
 
+TiedEmbedding::TiedEmbedding(int n_vocab, int n_embd, int max_ctx, ModuleDtype dtype)
+    : weight{Tensor({n_vocab, n_embd}, dtype.wdtype)},
+      emb_acv{Tensor({max_ctx, n_embd}, dtype.adtype)},
+      proj_acv{Tensor({n_vocab}, kFloat32)}
+{
+
+}
+
+Tensor TiedEmbedding::forward_embed(const Tensor& tokens, const int start_pos) {
+    Timer timer{&emb_exec_time};
+    
+    const int n_embd = weight.dimsize(1);
+    emb_acv.resize({tokens.numel(), n_embd});
+
+    ops::token_embed(weight, tokens, emb_acv, start_pos);
+
+    return emb_acv;
+}
+
+Tensor TiedEmbedding::forward_proj(const Tensor& inp)
+{
+    Timer timer{&proj_exec_time};
+
+    // Hack to allow us to compute the logits for the last token only.
+    proj_acv.set_strides({0});
+    const int start_pos = inp.dimsize(0) - 1;
+    ops::matmul_2d(inp, weight, proj_acv, start_pos);
+    proj_acv.set_strides({1});
+
+    return proj_acv;
+}
+
 Residual::Residual(int max_ctx, int n_out, Dtype dtype)
     : acv{Tensor({max_ctx, n_out}, dtype)}
 {

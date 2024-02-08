@@ -543,7 +543,7 @@ int main(int argc, char const *argv[])
     Zephyr1_6b model{n_predict, dtype};
     model.load_from_ckpt(checkpoint);
 
-    BPETokenizer tokenizer{"tokenizer.bin", 100352};
+    BPETokenizer tokenizer{"zephyr_tok.bin", 100352};
     
     if (prompt == "") {
         std::cout << "Chat interface. Write your prompt and press enter to submit. Enter q or press ctrl+c to quit.\n";

@@ -29,6 +29,25 @@ public:
     int64_t exec_time{0};
 };
 
+/// Provides an embedding table lookup for tokens.
+class TiedEmbedding {
+public:
+    TiedEmbedding() = default;
+    TiedEmbedding(int n_vocab, int d_embed, int max_ctx, ModuleDtype dtype);
+ 
+    /// Returns the embeddings of the given tokens. The input tensor must be of shape
+    /// (n_ctx,) and the output tensor is of shape (n_ctx, d_embed).
+    Tensor forward_embed(const Tensor& tokens, const int start_pos = 0);
+    Tensor forward_proj(const Tensor& tokens);
+
+public:
+    Tensor weight;
+    Tensor emb_acv;
+    Tensor proj_acv;
+    int64_t emb_exec_time{0};
+    int64_t proj_exec_time{0};
+};
+
 
 class RMSNorm {
 public:

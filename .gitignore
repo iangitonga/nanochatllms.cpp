@@ -1,3 +1,5 @@
 models/
+research/
 tinyllama/tinyllama
 zephyr1_6b/zephyr
+miniCPM/minicpm
