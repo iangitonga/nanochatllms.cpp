@@ -23,7 +23,7 @@ struct TokenIndex{
 
 class Tokenizer {
 public:
-    const int eos = 32002;
+    const int eos = 2;
 
 public:
     Tokenizer(const char* path, int vocab_size);
