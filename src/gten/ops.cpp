@@ -6,6 +6,10 @@
 #include "simd_ops.h"
 #include "ops.h"
 
+#if defined(__AVX__)
+#include <immintrin.h>
+#endif
+
 
 namespace gten {
 namespace ops {
@@ -135,7 +139,7 @@ void scale(Tensor& inp, float scaler, const int start_pos)
 
 static void vec_add_f32(const float* a, const float* b, float* out, int vec_size)
 {
-#ifdef GTEN_SIMD_AVX
+#if defined(__AVX__)
 
     const int simd_vec_size = (vec_size / GTEN_SIMD_VEC_SIZE) * GTEN_SIMD_VEC_SIZE;
 
@@ -177,7 +181,7 @@ static void vec_add_f32(const float* a, const float* b, float* out, int vec_size
 
 static float vec_dot_product_f16(const Float16* vec_a, const Float16* vec_b, int vec_size)
 {
-#ifdef GTEN_SIMD_AVX
+#if defined(__AVX__)
 
     const int simd_vec_size = (vec_size / GTEN_SIMD_VEC_SIZE) * GTEN_SIMD_VEC_SIZE;
     
@@ -214,7 +218,7 @@ static float vec_dot_product_f16(const Float16* vec_a, const Float16* vec_b, int
 
 static float vec_dot_product_f32(const float* vec_a, const float* vec_b, int vec_size)
 {
-#ifdef GTEN_SIMD_AVX
+#if defined(__AVX__)
 
     const int simd_vec_size = (vec_size / GTEN_SIMD_VEC_SIZE) * GTEN_SIMD_VEC_SIZE;
     
@@ -267,7 +271,7 @@ static float vec_dot_product_q8(const Q8Block* inp0, const Q8Block* inp1, const 
     GTEN_ASSERT(vec_size % block_size == 0);
     const int n_blocks = vec_size / block_size;
 
-#ifdef GTEN_SIMD_AVX
+#if defined(__AVX__)
     GTEN_ASSERT(block_size % 16 == 0);
     // Dot product accumulator with 4 slots. The sum of the four accumulators gives the
     // dot product.
@@ -360,7 +364,7 @@ static float vec_dot_product_q8_q4(const Q8Block* inp0, const Q4Block* inp1, con
     GTEN_ASSERT(block_size == globs::q4_block_size && vec_size % block_size == 0);
     const int n_blocks = vec_size / block_size;
 
-#ifdef GTEN_SIMD_AVX
+#if defined(__AVX__)
     GTEN_ASSERT(block_size % 16 == 0);
     // Dot product accumulator with 4 slots. The sum of the four accumulators gives the
     // dot product.

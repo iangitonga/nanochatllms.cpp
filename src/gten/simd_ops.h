@@ -8,14 +8,10 @@
 #include "gten_types.h"
 
 
-
-// TODO: Allow AVX without F16C for FP32 mode.
-#if defined(__AVX__) && defined(__F16C__)
-#define GTEN_SIMD_AVX 1
-
+#if defined(__AVX__)
 #include <immintrin.h>
-
 #endif
+
 
 namespace gten {
 
@@ -24,7 +20,7 @@ namespace ops {
 // Number of floats the avx registers (256bit) can process.
 #define GTEN_SIMD_VEC_SIZE 8
 
-#ifdef GTEN_SIMD_AVX
+#if defined(__AVX__)
 
 // FUNDAMENTAL VECTOR DATA TYPES.
 typedef __m256 Vec_f32x8;
@@ -32,7 +28,15 @@ typedef __m256 Vec_f32x8;
 // FLOATING POINT VECTOR OPERATIONS
 
 inline Vec_f32x8 vec_f32x8_load(const Float16* src_ptr) {
+#if defined(__F16C__)
     return _mm256_cvtph_ps(_mm_loadu_si128((__m128i_u *)(const_cast<Float16*>(src_ptr))));
+#else
+    float f32[GTEN_SIMD_VEC_SIZE];
+    for (int i = 0; i < GTEN_SIMD_VEC_SIZE; ++i) {
+        f32[i] = fp16_to_fp32(src_ptr[i]);
+    }
+    return _mm256_loadu_ps(f32);
+#endif
 }
 
 inline Vec_f32x8 vec_f32x8_load(const float* src_ptr) {
@@ -44,7 +48,15 @@ inline void vec_f32x8_store(Vec_f32x8 vec, float* dest_ptr) {
 }
 
 inline void vec_f32x8_store(Vec_f32x8 vec, Float16* dest_ptr) {
-    return _mm_storeu_si128((__m128i_u *)dest_ptr, _mm256_cvtps_ph(vec, 0));
+#if defined(__F16C__)
+    _mm_storeu_si128((__m128i_u *)dest_ptr, _mm256_cvtps_ph(vec, 0));
+#else
+    float* f32 = (float*)(&vec);
+    for (int i = 0; i < GTEN_SIMD_VEC_SIZE; ++i)
+    {
+        dest_ptr[i] = fp32_to_fp16(f32[i]);
+    }
+#endif
 }
 
 inline Vec_f32x8 vec_f32x8_add(Vec_f32x8 a, Vec_f32x8 b) {

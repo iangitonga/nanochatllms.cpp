@@ -10,7 +10,7 @@ namespace gten {
 
 void greedy_sample(std::string& prompt, Model* model, Tokenizer* tokenizer, bool showstat)
 {
-    const int n_predict = std::max(model->max_inference_ctx, model->max_train_ctx);
+    const int n_predict = std::min(model->max_inference_ctx, model->max_train_ctx);
     std::vector<int> tokens = tokenizer->encode(prompt);
     tokens.reserve(n_predict);
 
@@ -63,9 +63,9 @@ void greedy_sample(std::string& prompt, Model* model, Tokenizer* tokenizer, bool
 void topk_sample(std::string& prompt, Model* model, Tokenizer* tokenizer, float temp, int top_k, bool showstat)
 {
     // TODO: fix topk max situation.
-    top_k = std::max(top_k, 1000);
-    temp = std::max(temp, 2.0f);
-    const int n_predict = std::max(model->max_inference_ctx, model->max_train_ctx);
+    top_k = std::min(top_k, 1000);
+    temp = std::min(temp, 2.0f);
+    const int n_predict = std::min(model->max_inference_ctx, model->max_train_ctx);
 
     std::random_device rd;
     std::mt19937 gen(rd());

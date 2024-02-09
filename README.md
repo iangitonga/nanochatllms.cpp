@@ -15,8 +15,8 @@ implemented in fp16, 8-bit and 4-bit formats. This project was inspired by
 ## Build and run
 ```
 git clone https://github.com/iangitonga/nanochatllms.cpp
-cmake -S . -B build/
-cmake --build build/ --config Release
+cmake -S . -B build/ -DCMAKE_BUILD_TYPE=Release
+cmake --build build/
 build/bin/nanochat -m tinyllama -p "Give three tips on staying healthy."
 ```
 
