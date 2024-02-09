@@ -25,7 +25,9 @@ struct TokenIndex{
 
 class LLamaTokenizer : public Tokenizer {
 public:
-    LLamaTokenizer(const char* path, int vocab_size, int eos);
+    LLamaTokenizer(const char* path, int vocab_size, int eos,
+        const std::string& prompt_prefix, const std::string& prompt_suffix,
+        const std::vector<int>& tokens_prefix, const std::vector<int>& tokens_suffix);
     ~LLamaTokenizer();
     std::vector<int> encode(std::string& prompt);
     const char* decode(int prev_token, int token);

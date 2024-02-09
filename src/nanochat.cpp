@@ -188,8 +188,12 @@ int main(int argc, char const *argv[])
     if (model_name == "tinyllama")
     {
         model_ptr = new TinyLLama{n_predict, dtype};
+
+        const char* tok_path = "./assets/tokenizers/tinyllama_tokenizer.bin";
         const int vocab_size = tinyllama_cfg.n_vocab - 3;
-        tokenizer = new LLamaTokenizer{"./assets/tokenizers/tinyllama_tokenizer.bin", vocab_size, tinyllama_cfg.eos};
+        const std::vector<int> prefix_tokens = {1, 32001};
+        const std::vector<int> suffix_tokens = {32002, 29871, 13, 32001, 20255, 13};
+        tokenizer = new LLamaTokenizer{tok_path, vocab_size, tinyllama_cfg.eos, "user\n", "", prefix_tokens, suffix_tokens};
     }
     else if (model_name == "zephyr")
     {
@@ -199,7 +203,10 @@ int main(int argc, char const *argv[])
     else if (model_name == "minicpm")
     {
         model_ptr = new MiniCPM{n_predict, dtype};
-        tokenizer = new LLamaTokenizer{"./assets/tokenizers/minicpm_tokenizer.bin", minicpm_cfg.n_vocab, minicpm_cfg.eos};
+        const char* tok_path = "./assets/tokenizers/minicpm_tokenizer.bin";
+        const std::string prompt_prefix = "<用户>";
+        const std::string prompt_suffix = "<AI>";
+        tokenizer = new LLamaTokenizer{tok_path, minicpm_cfg.n_vocab, minicpm_cfg.eos, prompt_prefix, prompt_suffix, {}, {}};
     }
     else
     {

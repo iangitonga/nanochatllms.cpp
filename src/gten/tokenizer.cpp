@@ -27,8 +27,11 @@ static int compare_tokens(const void *a, const void *b) {
 }
 
 
-LLamaTokenizer::LLamaTokenizer(const char* tokenizer_path, int vocab_size, int eos)
-    : Tokenizer(vocab_size, eos)
+LLamaTokenizer::LLamaTokenizer(
+    const char* tokenizer_path, int vocab_size, int eos,
+    const std::string& prompt_prefix, const std::string& prompt_suffix,
+    const std::vector<int>& tokens_prefix, const std::vector<int>& tokens_suffix)
+    : Tokenizer(vocab_size, eos, prompt_prefix, prompt_suffix, tokens_prefix, tokens_suffix)
 {
     // malloc space to hold the scores and the strings
     vocab_ = (char**)std::malloc(vocab_size * sizeof(char*));
@@ -61,7 +64,6 @@ LLamaTokenizer::LLamaTokenizer(const char* tokenizer_path, int vocab_size, int e
     }
     fclose(file);
 }
-
 
 LLamaTokenizer::~LLamaTokenizer() {
     for (int i = 0; i < vocab_size; i++) {
@@ -99,35 +101,37 @@ static int str_lookup(const char *str, TokenIndex *sorted_vocab, int vocab_size)
 
 std::vector<int> LLamaTokenizer::encode(std::string& prompt)
 {
+    prompt = prompt_prefix + prompt + prompt_suffix;
     // prompt format: <|im_start|>user\nPROMPT<|im_end|>\n<|im_start|>assistant\n
 
     // [<bos>, <|im_start|>]
-    static const int pre_prompt_tokens[] = {1, 32001};
+    // static const int pre_prompt_tokens[] = {1, 32001};
     // [<|im_end|>, \, n, <|im_start|>, assistant\, n]
-    static const int post_prompt_tokens[] = {32002, 29871, 13, 32001, 20255, 13};
+    // static const int post_prompt_tokens[] = {32002, 29871, 13, 32001, 20255, 13};
 
     const int num_prompt_tokens = prompt.size() + 1; // +1 for '\0'
 
     std::vector<int> prompt_tokens;
     prompt_tokens.reserve(num_prompt_tokens);
 
-    prompt.insert(0, "user\n");
+    // prompt.insert(0, "user\n");
     encode_internal(prompt, prompt_tokens);
 
     /// TODO: Use a single vector.
     std::vector<int> out_tokens;
-    out_tokens.reserve(num_prompt_tokens + 4 + 6);
-    for (int i = 0; i < 2; i++) {
-        out_tokens.push_back(pre_prompt_tokens[i]);
+    out_tokens.reserve(num_prompt_tokens);
+
+    for (int i = 0; i < int(prompt_prefix_tokens.size()); i++) {
+        out_tokens.push_back(prompt_prefix_tokens[i]);
     }
 
     for (int token : prompt_tokens) {
         out_tokens.push_back(token);
     }
 
-    for (int i = 0; i < 6; i++)
+    for (int i = 0; i < int(prompt_suffix_tokens.size()); i++)
     {
-        out_tokens.push_back(post_prompt_tokens[i]);
+        out_tokens.push_back(prompt_suffix_tokens[i]);
     }
     
     return out_tokens;
@@ -250,7 +254,7 @@ void LLamaTokenizer::encode_internal(const std::string& prompt, std::vector<int>
 // ------------------------- GPT2 Tokenizer ----------------------------------------------
 
 Gpt2Tokenizer::Gpt2Tokenizer(const std::string vocab_path, const int n_vocab, int eos)
-    : Tokenizer(n_vocab, eos)
+    : Tokenizer(n_vocab, eos, "", "", {}, {})
 {
     std::ifstream fin{vocab_path, std::ios_base::binary};
     GTEN_ASSERTM(fin.is_open(), "Failed to open vocab file: %s.", vocab_path.c_str());
