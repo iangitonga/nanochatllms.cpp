@@ -1,57 +1,35 @@
-#pragma once
-
 // Modified version of code obtained from the repo: https://github.com/karparthy/llama2.c
 // created by the brilliant Andrej Karparthy. [MIT licence].
 
-#include <cstdlib>
+#include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <ctype.h>
+#include <fstream>
 #include <iostream>
-#include <vector>
+#include <map>
+#include <regex>
 #include <string>
+#include <vector>
+
+#include "abc.h"
+#include "tokenizer.h"
 
 
+
+namespace gten {
 // ----------------------------------------------------------------------------
 // The Byte Pair Encoding (BPE) Tokenizer that translates strings <-> tokens
 
-struct TokenIndex{
-    char *str;
-    int id;
-};
-
-
-class Tokenizer {
-public:
-    const int eos = 32002;
-
-public:
-    Tokenizer(const char* path, int vocab_size);
-    ~Tokenizer();
-    std::vector<int> encode(std::string& prompt);
-    const char* decode(int prev_token, int token);
-
-private:
-    void encode_internal(const std::string& prompt, std::vector<int>& out_tokens);
-
-private:
-    char** vocab_;
-    float* vocab_scores_;
-    TokenIndex *sorted_vocab_;
-    int vocab_size_;
-    unsigned int max_token_length_;
-    unsigned char byte_pieces_[512]; // stores all single-byte strings
-};
-
-
-int compare_tokens(const void *a, const void *b) {
+static int compare_tokens(const void *a, const void *b) {
     return strcmp(((TokenIndex*)a)->str, ((TokenIndex*)b)->str);
 }
 
 
-Tokenizer::Tokenizer(const char* tokenizer_path, int vocab_size) {
-    // i should have written the vocab_size into the tokenizer file... sigh
-    vocab_size_ = vocab_size;
+LLamaTokenizer::LLamaTokenizer(const char* tokenizer_path, int vocab_size, int eos)
+    : Tokenizer(vocab_size, eos)
+{
     // malloc space to hold the scores and the strings
     vocab_ = (char**)std::malloc(vocab_size * sizeof(char*));
     vocab_scores_ = (float*)std::malloc(vocab_size * sizeof(float));
@@ -85,8 +63,8 @@ Tokenizer::Tokenizer(const char* tokenizer_path, int vocab_size) {
 }
 
 
-Tokenizer::~Tokenizer() {
-    for (int i = 0; i < vocab_size_; i++) {
+LLamaTokenizer::~LLamaTokenizer() {
+    for (int i = 0; i < vocab_size; i++) {
         free(vocab_[i]);
     }
     free(vocab_);
@@ -95,8 +73,8 @@ Tokenizer::~Tokenizer() {
 }
 
 
-const char* Tokenizer::decode(int prev_token, int token) {
-    if (token >= vocab_size_) {
+const char* LLamaTokenizer::decode(int prev_token, int token) {
+    if (token >= vocab_size) {
         return "";
     }
     char *piece = vocab_[token];
@@ -111,21 +89,7 @@ const char* Tokenizer::decode(int prev_token, int token) {
     return piece;
 }
 
-void safe_printf(const char *piece) {
-    // piece might be a raw byte token, and we only want to print printable chars or whitespace
-    // because some of the other bytes can be various control codes, backspace, etc.
-    if (piece == NULL) { return; }
-    if (piece[0] == '\0') { return; }
-    if (piece[1] == '\0') {
-        unsigned char byte_val = piece[0];
-        if (!(isprint(byte_val) || isspace(byte_val))) {
-            return; // bad byte, don't print it
-        }
-    }
-    printf("%s", piece);
-}
-
-int str_lookup(const char *str, TokenIndex *sorted_vocab, int vocab_size) {
+static int str_lookup(const char *str, TokenIndex *sorted_vocab, int vocab_size) {
     // efficiently find the perfect match for str in vocab, return its index or -1 if not found
     const TokenIndex tok = { .str = const_cast<char*>(str) }; // acts as the key to search for
     TokenIndex *res = (TokenIndex*)bsearch(&tok, sorted_vocab, vocab_size, sizeof(TokenIndex), compare_tokens);
@@ -133,7 +97,7 @@ int str_lookup(const char *str, TokenIndex *sorted_vocab, int vocab_size) {
 }
 
 
-std::vector<int> Tokenizer::encode(std::string& prompt)
+std::vector<int> LLamaTokenizer::encode(std::string& prompt)
 {
     // prompt format: <|im_start|>user\nPROMPT<|im_end|>\n<|im_start|>assistant\n
 
@@ -169,7 +133,7 @@ std::vector<int> Tokenizer::encode(std::string& prompt)
     return out_tokens;
 }
 
-void Tokenizer::encode_internal(const std::string& prompt, std::vector<int>& out_tokens) {
+void LLamaTokenizer::encode_internal(const std::string& prompt, std::vector<int>& out_tokens) {
     const char* text = prompt.c_str();
     // encode the string text (input) into an upper-bound preallocated tokens[] array int *tokens, int *n_tokens
     // bos != 0 means prepend the BOS token (=1), eos != 0 means append the EOS token (=2)
@@ -177,12 +141,12 @@ void Tokenizer::encode_internal(const std::string& prompt, std::vector<int>& out
 
     if (sorted_vocab_ == NULL) {
         // lazily malloc and sort the vocabulary
-        sorted_vocab_ = (TokenIndex*)malloc(vocab_size_ * sizeof(TokenIndex));
-        for (int i = 0; i < vocab_size_; i++) {
+        sorted_vocab_ = (TokenIndex*)malloc(vocab_size * sizeof(TokenIndex));
+        for (int i = 0; i < vocab_size; i++) {
             sorted_vocab_[i].str = vocab_[i];
             sorted_vocab_[i].id = i;
         }
-        qsort(sorted_vocab_, vocab_size_, sizeof(TokenIndex), compare_tokens);
+        qsort(sorted_vocab_, vocab_size, sizeof(TokenIndex), compare_tokens);
     }
 
     // create a temporary buffer that will store merge candidates of always two consecutive tokens
@@ -195,7 +159,7 @@ void Tokenizer::encode_internal(const std::string& prompt, std::vector<int>& out
     // TODO: pretty sure this isn't correct in the general case but I don't have the
     // energy to read more of the sentencepiece code to figure out what it's doing
     if (text[0] != '\0') {
-        int dummy_prefix = str_lookup(" ", sorted_vocab_, vocab_size_);
+        int dummy_prefix = str_lookup(" ", sorted_vocab_, vocab_size);
         out_tokens.push_back(dummy_prefix);
     }
 
@@ -232,7 +196,7 @@ void Tokenizer::encode_internal(const std::string& prompt, std::vector<int>& out
         }
 
         // ok c+1 is not a continuation byte, so we've read in a full codepoint
-        int id = str_lookup(str_buffer, sorted_vocab_, vocab_size_);
+        int id = str_lookup(str_buffer, sorted_vocab_, vocab_size);
 
         if (id != -1) {
             // we found this codepoint in vocab, add it as a token
@@ -241,7 +205,7 @@ void Tokenizer::encode_internal(const std::string& prompt, std::vector<int>& out
             // byte_fallback encoding: just encode each byte as a token
             // +3 is here because the first 3 vocab elements are <unk>, <s>, </s>
             // so the individual bytes only start at index 3
-            for (int i=0; i < str_len; i++) {
+            for (int i=0; i < int(str_len); i++) {
                 out_tokens.push_back((unsigned char)str_buffer[i] + 3);
             }
         }
@@ -254,10 +218,10 @@ void Tokenizer::encode_internal(const std::string& prompt, std::vector<int>& out
         int best_id = -1;
         int best_idx = -1;
 
-        for (int i=0; i < (out_tokens.size()-1); i++) {
+        for (int i=0; i < int(out_tokens.size()-1); i++) {
             // check if we can merge the pair (tokens[i], tokens[i+1])
             sprintf(str_buffer, "%s%s", vocab_[out_tokens[i]], vocab_[out_tokens[i+1]]);
-            int id = str_lookup(str_buffer, sorted_vocab_, vocab_size_);
+            int id = str_lookup(str_buffer, sorted_vocab_, vocab_size);
             if (id != -1 && vocab_scores_[id] > best_score) {
                 // this merge pair exists in vocab! record its score and position
                 best_score = vocab_scores_[id];
@@ -273,7 +237,7 @@ void Tokenizer::encode_internal(const std::string& prompt, std::vector<int>& out
         // merge the consecutive pair (best_idx, best_idx+1) into new token best_id
         out_tokens[best_idx] = best_id;
         // delete token at position best_idx+1, shift the entire sequence back 1
-        for (int i = best_idx+1; i < (out_tokens.size()-1); i++) {
+        for (int i = best_idx+1; i < int(out_tokens.size()-1); i++) {
             out_tokens[i] = out_tokens[i+1];
         }
         out_tokens.pop_back();
@@ -283,30 +247,94 @@ void Tokenizer::encode_internal(const std::string& prompt, std::vector<int>& out
 }
 
 
+// ------------------------- GPT2 Tokenizer ----------------------------------------------
 
-// int main(int argc, char const *argv[])
-// {
-//     Tokenizer tokenizer{"tokenizer.bin", 32000};
+Gpt2Tokenizer::Gpt2Tokenizer(const std::string vocab_path, const int n_vocab, int eos)
+    : Tokenizer(n_vocab, eos)
+{
+    std::ifstream fin{vocab_path, std::ios_base::binary};
+    GTEN_ASSERTM(fin.is_open(), "Failed to open vocab file: %s.", vocab_path.c_str());
 
-//     std::string prompt = "Who is Karl Marx?";
+    std::string word;
+    for (int i = 0; i < n_vocab; i++)
+    {
+        uint32_t len;
+        fin.read((char *) &len, sizeof(len));
 
-//     std::vector<int> tokens = tokenizer.encode(prompt);
+        word.resize(len);
+        fin.read((char *) word.data(), len);
 
-//     for (int i = 0; i < tokens.size(); i++)
-//     {
-//         std::cout << tokens[i] << "\n";
-//     }
+        token_to_id_[word] = i;
+        id_to_token_[i] = word;
+    }
+}
 
-//     const int toks[] = {1, 24115, 29880, 28579, 313, 29896, 29947, 29896, 29900, 297, 5115, 29892, 9556, 448, 29871, 29896, 29947, 29947, 29941};
-    
-//     for (int i = 1; i < 18; i++)
-//     {
-//         // std::cout << tokenizer.decode(toks[i]) << " ";
 
-//         safe_printf(tokenizer.decode(toks[i-1], toks[i]));
-//     }
-//     std::cout << "\n";
+// Convert a single token id into text.
+const char* Gpt2Tokenizer::decode(int /*prev_token*/, int32_t token_id) {
+    return id_to_token_[token_id].c_str();
+}
 
-//     return 0;
-// }
+// Convert a string of arbitrary text to a sequence of tokens ids.
+std::vector<int32_t> Gpt2Tokenizer::encode(std::string& text) {
+    std::vector<std::string> words;
+
+    // first split the text into words
+    std::string str = text;
+    std::regex re(pat_);
+    std::smatch m;
+
+    while (std::regex_search(str, m, re)) {
+        for (auto x : m) {
+            words.push_back(x);
+        }
+        str = m.suffix();
+    }
+
+    // find the longest tokens that form the words:
+    std::vector<int32_t> tokens;
+    tokens.reserve(encode_prefix.size());
+    // prepend prefix.
+    tokens.insert(tokens.end(), encode_prefix.begin(), encode_prefix.end());
+
+    for (const auto & word : words)
+    {
+        if (word.size() == 0) continue;
+
+        int i = 0;
+        int n = word.size();
+        while (i < n) {
+            int j = n;
+            while (j > i)
+            {
+                auto it = token_to_id_.find(word.substr(i, j-i));
+                if (it != token_to_id_.end()) {
+                    tokens.push_back(it->second);
+                    i = j;
+                    break;
+                }
+                --j;
+            }
+            if (i == n)
+                break;
+            if (j == i)
+            {
+                auto sub = word.substr(i, 1);
+                if (token_to_id_.find(sub) != token_to_id_.end())
+                    tokens.push_back(token_to_id_.at(sub));
+                else
+                    fprintf(stderr, "%s: unknown token '%s'\n", __func__, sub.data());
+                ++i;
+            }
+        }
+    }
+
+    // append suffix.
+    tokens.reserve(tokens.size() + encode_suffix.size());
+    tokens.insert(tokens.end(), encode_suffix.begin(), encode_suffix.end());
+
+    return tokens;
+}
+
+} // namespace gten
 

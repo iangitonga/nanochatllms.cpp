@@ -4,6 +4,7 @@
 #include "quants.h"
 #include "tensor.h"
 #include "simd_ops.h"
+#include "ops.h"
 
 
 namespace gten {
@@ -33,7 +34,7 @@ private:
 static const OpsState g_ops_state = OpsState();
 
 
-void read_row_to_float(const char* inp, Dtype inp_dtype, float* out_buf, const int rowsize)
+static void read_row_to_float(const char* inp, Dtype inp_dtype, float* out_buf, const int rowsize)
 {
     switch (inp_dtype)
     {
@@ -66,7 +67,7 @@ void read_row_to_float(const char* inp, Dtype inp_dtype, float* out_buf, const i
 }
 
 
-void write_row_from_float(float* inp, char* out, Dtype out_dtype, int rowsize) {
+static void write_row_from_float(float* inp, char* out, Dtype out_dtype, int rowsize) {
     switch (out_dtype) {
         case kQint8:
         {
@@ -91,6 +92,46 @@ void write_row_from_float(float* inp, char* out, Dtype out_dtype, int rowsize) {
     }
 }
 
+static void vec_scale_f32(float* a, const float scalar, int vec_size)
+{
+    const int unrolled_vec_size = (vec_size / 8) * 8;
+
+    for (int i = 0; i < unrolled_vec_size; i += 8) {
+        a[i + 0] = a[i + 0] * scalar;
+        a[i + 1] = a[i + 1] * scalar;
+        a[i + 2] = a[i + 2] * scalar;
+        a[i + 3] = a[i + 3] * scalar;
+        a[i + 4] = a[i + 4] * scalar;
+        a[i + 5] = a[i + 5] * scalar;
+        a[i + 6] = a[i + 6] * scalar;
+        a[i + 7] = a[i + 7] * scalar;
+    } 
+
+    // leftovers
+    for (int i = unrolled_vec_size; i < vec_size; i++) {
+        a[i] = a[i] * scalar;
+    }
+}
+
+void scale(Tensor& inp, float scaler, const int start_pos)
+{
+    char* inp_data = inp.data_ptr<char>();
+
+    const int n_ctx = inp.dimsize(0);
+    const int n_embd = inp.dimsize(1);
+    const int inp_st0 = inp.bstride(0);
+
+    float* inp_buf = ops::g_ops_state.buf(n_embd);
+
+    for (int i = start_pos; i < n_ctx; ++i)
+    {
+        ops::read_row_to_float(inp_data + i * inp_st0, inp.dtype(), inp_buf, n_embd);
+
+        vec_scale_f32(inp_buf, scaler, n_embd);
+
+        ops::write_row_from_float(inp_buf, inp_data + i * inp_st0, inp.dtype(), n_embd);   
+    }
+}
 
 static void vec_add_f32(const float* a, const float* b, float* out, int vec_size)
 {
@@ -132,6 +173,7 @@ static void vec_add_f32(const float* a, const float* b, float* out, int vec_size
 
 #endif
 }
+
 
 static float vec_dot_product_f16(const Float16* vec_a, const Float16* vec_b, int vec_size)
 {
@@ -418,7 +460,7 @@ static float vec_dot_product_q8_q4(const Q8Block* inp0, const Q4Block* inp1, con
 }
 
 
-float vec_dot_product(const char* inp0, Dtype inp0_dtype, const char* inp1, Dtype inp1_dtype, int vecsize)
+static float vec_dot_product(const char* inp0, Dtype inp0_dtype, const char* inp1, Dtype inp1_dtype, int vecsize)
 {
     switch (inp0_dtype)
     {
@@ -449,6 +491,7 @@ float vec_dot_product(const char* inp0, Dtype inp0_dtype, const char* inp1, Dtyp
         }
     }
 }
+
 
 static void copy_row(const Tensor& src, Tensor& dest, const int src_row_idx, const int dest_row_idx)
 {
@@ -490,7 +533,7 @@ static void tensor_row_index_impl(const Tensor& src, const Tensor& indices, Tens
 /// @param out A 2d tensor with enough capacity to fit the indexed rows. Its dtype
 ///  must be the same as source tensor.
 /// @param last_token_only Whether to index the last token only, if others are cached.
-void token_embed(const Tensor& weight, const Tensor& tokens, Tensor& out, const int start_pos = 0)
+void token_embed(const Tensor& weight, const Tensor& tokens, Tensor& out, const int start_pos)
 {
     GTEN_ASSERT(weight.is_2d());
     GTEN_ASSERT(tokens.is_1d() && tokens.dtype() == kInt32);
@@ -503,7 +546,7 @@ void token_embed(const Tensor& weight, const Tensor& tokens, Tensor& out, const 
 }
 
 
-void matmul_2d_impl(const Tensor& inp, const Tensor& w, Tensor& out, const int start_pos)
+static void matmul_2d_impl(const Tensor& inp, const Tensor& w, Tensor& out, const int start_pos)
 {
     const char* inp_data = inp.data_ptr<char>();
     const char* w_data = w.data_ptr<char>(); 
@@ -539,7 +582,7 @@ void matmul_2d_impl(const Tensor& inp, const Tensor& w, Tensor& out, const int s
 }
 
 
-static void matmul_2d(const Tensor& x, const Tensor& w, Tensor& out, const int start_pos=0)
+void matmul_2d(const Tensor& x, const Tensor& w, Tensor& out, const int start_pos)
 {
     const int n_ctx = x.dimsize(0);
     const int n_out = w.dimsize(0);
@@ -561,8 +604,7 @@ static void matmul_2d(const Tensor& x, const Tensor& w, Tensor& out, const int s
 }
 
 
-
-static void bias_add_inplace(Tensor& inp, const Tensor& bias, const int start_pos=0)
+void bias_add_inplace(Tensor& inp, const Tensor& bias, const int start_pos)
 {
     GTEN_ASSERT(inp.dimsize(1) == bias.numel());
     GTEN_ASSERT(bias.is_1d() && bias.dtype() == kFloat16);
@@ -590,6 +632,7 @@ static void bias_add_inplace(Tensor& inp, const Tensor& bias, const int start_po
         write_row_from_float(out_buf, inp_data + i * inp_st0, inp.dtype(), n_embd);   
     }
 }
+
 
 static void vec_layer_norm_f32(const float* vec, const Float16* weight, const Float16* bias, float* out, int vec_size)
 {
@@ -622,7 +665,8 @@ static void vec_layer_norm_f32(const float* vec, const Float16* weight, const Fl
     }
 }
 
-static void layer_norm(const Tensor& inp, const Tensor& weight, const Tensor& bias, Tensor& out, const int start_pos = 0) {
+
+void layer_norm(const Tensor& inp, const Tensor& weight, const Tensor& bias, Tensor& out, const int start_pos) {
     GTEN_ASSERT(weight.dimsize(0) == inp.dimsize(1));
     GTEN_ASSERT(inp.is_2d());
     GTEN_ASSERT(weight.is_1d() && weight.dtype() == kFloat16);
@@ -681,7 +725,7 @@ static void silu_impl(const Tensor& inp, Tensor& out, const int start_pos)
 }
 
 
-static void silu(const Tensor& inp, Tensor& out, const int start_pos=0)
+void silu(const Tensor& inp, Tensor& out, const int start_pos)
 {
     GTEN_ASSERT(inp.shape_eq(out.shape()));
     GTEN_ASSERT(inp.dtype() == out.dtype());
@@ -689,7 +733,8 @@ static void silu(const Tensor& inp, Tensor& out, const int start_pos=0)
     silu_impl(inp, out, start_pos);
 }
 
-static void silu_inplace(Tensor& inp, const int start_pos=0)
+
+void silu_inplace(Tensor& inp, const int start_pos)
 {
     silu_impl(inp, inp, start_pos);
 }
@@ -740,10 +785,12 @@ static void rotary_emb_impl(Tensor& inp, const int d_head, const float rope_pct,
     }
 }
 
-static void rotary_emb(Tensor& inp, const int d_head, const float rope_pct, const int start_pos=0)
+
+void rotary_emb(Tensor& inp, const int d_head, const float rope_pct, const int start_pos)
 {
     rotary_emb_impl(inp, d_head, rope_pct, start_pos);
 }
+
 
 static void rms_norm_vec_f32(const float* inp, const Float16* weight, float* out, const int vec_size) {
     float sq_sum = 0.0f;
@@ -762,6 +809,7 @@ static void rms_norm_vec_f32(const float* inp, const Float16* weight, float* out
         out[i] = xi / (root_mean_sq + 1e-6f) * wi;
     }
 }
+
 
 static void rms_norm_impl(const Tensor& inp, const Tensor& weight, Tensor& out, const int start_pos)
 {
@@ -789,7 +837,8 @@ static void rms_norm_impl(const Tensor& inp, const Tensor& weight, Tensor& out, 
     }
 }
 
-static void rms_norm(const Tensor& inp, const Tensor& weight, Tensor& out, const int start_pos=0) {
+
+void rms_norm(const Tensor& inp, const Tensor& weight, Tensor& out, const int start_pos) {
     const int n_embd = inp.dimsize(1);
     GTEN_ASSERT(weight.dimsize(0) == n_embd);
     GTEN_ASSERT(inp.is_2d() && inp.dtype() == out.dtype());
@@ -799,11 +848,13 @@ static void rms_norm(const Tensor& inp, const Tensor& weight, Tensor& out, const
     rms_norm_impl(inp, weight, out, start_pos);
 }
 
+
 static void vec_mul_f32(const float* a, const float* b, float* out, int vec_size) {
     for (int i = 0; i < vec_size; i++) {
         out[i] = a[i] * b[i];
     }
 }
+
 
 static void mul_impl(const Tensor& inp0, const Tensor& inp1, Tensor& out, const int start_pos)
 {
@@ -836,7 +887,7 @@ static void mul_impl(const Tensor& inp0, const Tensor& inp1, Tensor& out, const 
 }
 
 
-static void mul(const Tensor& inp0, const Tensor& inp1, Tensor& out, const int start_pos=0)
+void multiply(const Tensor& inp0, const Tensor& inp1, Tensor& out, const int start_pos)
 {
     GTEN_ASSERT(inp0.dtype() == inp1.dtype() && inp1.dtype() == out.dtype());
     GTEN_ASSERT(inp0.shape_eq(inp1.shape()) && inp1.shape_eq(out.shape()));
@@ -844,7 +895,7 @@ static void mul(const Tensor& inp0, const Tensor& inp1, Tensor& out, const int s
     mul_impl(inp0, inp1, out, start_pos);
 }
 
-static void mul_inplace(Tensor& inp0, const Tensor& inp1, const int start_pos=0)
+void multiply_inplace(Tensor& inp0, const Tensor& inp1, const int start_pos)
 {
     GTEN_ASSERT(inp0.dtype() == inp1.dtype());
     GTEN_ASSERT(inp0.shape_eq(inp1.shape()));
@@ -883,7 +934,8 @@ static void add_impl(const Tensor& inp0, const Tensor& inp1, Tensor& out, const 
     }
 }
 
-static void add(const Tensor& x0, const Tensor& x1, Tensor& out, const int start_pos=0)
+
+void add(const Tensor& x0, const Tensor& x1, Tensor& out, const int start_pos)
 {
     GTEN_ASSERT(x0.is_2d());
     GTEN_ASSERT(x1.is_2d());
@@ -895,25 +947,8 @@ static void add(const Tensor& x0, const Tensor& x1, Tensor& out, const int start
     add_impl(x0, x1, out, start_pos);
 }
 
-/*
 
-All Quantised tensors.
-
-A set of blocks.
-
-d1: h, rows
-d2: rows
-d3: row
-
-h, n_ctx, n_ctx
-
-n_ctx: blocks.
-
-how many blocks.
-
-*/
-
-void qk_masked_softmax(const Tensor& q, const Tensor& k, Tensor& qk_out, float scale_factor, const int start_pos)
+static void qk_masked_softmax(const Tensor& q, const Tensor& k, Tensor& qk_out, float scale_factor, const int start_pos)
 {
     const char* q_data = q.data_ptr<char>();
     const char* k_data = k.data_ptr<char>();
@@ -985,8 +1020,9 @@ void qk_masked_softmax(const Tensor& q, const Tensor& k, Tensor& qk_out, float s
     }
 }
 
+
 // Transpose and dequantize v.
-void transpose_v(const Tensor& inp, float* out_buf)
+static void transpose_v(const Tensor& inp, float* out_buf)
 {
     // v.view({n_ctx, kv_n_head, d_head}).permute({1, 2, 0});
     const char* inp_data = inp.data_ptr<char>();
@@ -1029,7 +1065,8 @@ void transpose_v(const Tensor& inp, float* out_buf)
     }
 }
 
-void qkv_matmul(const Tensor& qk, const Tensor& v, Tensor& qkv_out, const int start_pos)
+
+static void qkv_matmul(const Tensor& qk, const Tensor& v, Tensor& qkv_out, const int start_pos)
 {
     const char* qk_data = qk.data_ptr<char>();
     char* out_data = qkv_out.data_ptr<char>();
@@ -1075,9 +1112,6 @@ void qkv_matmul(const Tensor& qk, const Tensor& v, Tensor& qkv_out, const int st
 }
 
 
-// transposed_out
-// 12(f32) 6(f16) 3(8-bit) 1.5(4-bit)
-
 static void qkv_attn_impl(const Tensor& q, const Tensor& k, const Tensor& v, Tensor& qk, Tensor& qkv, int max_ctx, const int start_pos)
 {
     const int n_ctx = q.dimsize(0);
@@ -1101,7 +1135,8 @@ static void qkv_attn_impl(const Tensor& q, const Tensor& k, const Tensor& v, Ten
     ops::qkv_matmul(qk, v0, qkv0, start_pos);
 }
 
-static void qkv_attn(const Tensor& q, const Tensor& k, const Tensor& v, Tensor& qk, Tensor& qkv, const int max_ctx, const int start_pos=0)
+
+void qkv_attn(const Tensor& q, const Tensor& k, const Tensor& v, Tensor& qk, Tensor& qkv, const int max_ctx, const int start_pos)
 {
     const int n_ctx = q.dimsize(0);
     const int n_embd = q.dimsize(1);
@@ -1120,3 +1155,5 @@ static void qkv_attn(const Tensor& q, const Tensor& k, const Tensor& v, Tensor& 
 
 } // namespace ops
 } // namespace gten
+
+

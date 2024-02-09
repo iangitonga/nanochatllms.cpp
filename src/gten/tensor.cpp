@@ -4,9 +4,12 @@
 
 #include "tensor.h"
 #include "quants.h"
+#include "utils.h"
 
 
 namespace gten {
+
+int64_t Tensor::s_tensor_alloc_bytes = 0;
 
 /*
 
@@ -63,7 +66,7 @@ Tensor::Tensor(const std::vector<int>& shape, Dtype dtype)
 
     data_ptr_ = std::shared_ptr<uint8_t>(static_cast<uint8_t*>(raw_data_ptr), tensor_data_deleter);
     storage_size_ = alloc_bytes;
-    G_TensorMemAllocated += alloc_bytes;
+    Tensor::s_tensor_alloc_bytes += alloc_bytes;
 }
 
 

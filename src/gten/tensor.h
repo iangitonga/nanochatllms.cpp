@@ -11,13 +11,12 @@
 #include "quants.h"
 
 
+
 namespace gten {
 
-// TODO: make inside tensor.
-static int64_t G_TensorMemAllocated = 0;
-
-
 class Tensor {
+public:
+    static int64_t s_tensor_alloc_bytes;
 public:
     Tensor() = default;
     Tensor(const std::vector<int>& shape, Dtype dtype);
@@ -123,7 +122,7 @@ public:
     bool shape_eq(const std::vector<int>& shape) const { return shape == shape_; }
 
 private:
-    Dtype dtype_ = kFloat32;
+    Dtype dtype_ = kInt32;
     std::shared_ptr<uint8_t> data_ptr_;
     int storage_size_ = 0;  // in_bytes
     int numel_ = 0;

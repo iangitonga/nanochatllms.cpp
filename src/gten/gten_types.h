@@ -32,25 +32,15 @@ static const Dtype kFloat32 = Dtype::Float32;
 static const Dtype kQint8 = Dtype::Qint8;
 static const Dtype kQint4 = Dtype::Qint4;
 
+struct ModuleDtype {
+    Dtype wdtype;
+    Dtype adtype;
+};
 
-static const char* dtype_str(Dtype dtype) {
-    switch (dtype) {
-        case kInt32: 
-            return "Int32";
-        case kQint8:
-            return "Qint8";
-        case kQint4:
-            return "Qint4";
-        case kFloat16:
-            return "Float16";
-        case kFloat32:
-            return "Float32";
-        default: {
-            GTEN_ASSERT(false);
-            return "";
-        }
-    }
-}
+static const ModuleDtype mFloat16 = {.wdtype=kFloat16, .adtype=kFloat16};
+static const ModuleDtype mQint8 = {.wdtype=kQint8, .adtype=kQint8};
+static const ModuleDtype mQint4 = {.wdtype=kQint4, .adtype=kQint8};
+
 
 // fpcvt_stoh
 // f16_to_f32

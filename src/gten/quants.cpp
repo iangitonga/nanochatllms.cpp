@@ -1,55 +1,15 @@
-#pragma once
-
-
 #include <cmath>
 #include <memory>
 
 #include "gten_types.h"
 #include "log.h"
+#include "quants.h"
 
 namespace gten {
 
-namespace globs {
-static const int q8_block_size = 32;
-static const int q4_block_size = 32;
-}
-
-struct Q8Block
-{
-    Float16 delta;
-    Qint8 data[globs::q8_block_size];
-};
-
-static_assert(sizeof(Q8Block) == sizeof(Float16) + globs::q8_block_size);
-
-struct Q4Block
-{
-    Float16 delta;
-    Qint8 data[globs::q4_block_size / 2];
-};
-
-static_assert(sizeof(Q4Block) == sizeof(Float16) + globs::q4_block_size / 2);
-
-
 namespace ops {
 
-[[nodiscard]]
-inline Qint8 q8_quantize_single(float x, float delta) {
-    const float id = delta ? 1.0f/delta : 0.0f;
-
-    const float x0 = x * id;
-    const Qint8 quantized = static_cast<Qint8>(roundf(x0));
-
-    return quantized;
-}
-
-
-[[nodiscard]]
-inline float q8_dequantize_single(Qint8 x, float delta) {
-    return x * delta;
-}
-
-void q8_quantize_block(const float* inp, Q8Block* out, const int block_size) {
+static void q8_quantize_block(const float* inp, Q8Block* out, const int block_size) {
     float absmax = 0;
     for (int j = 0; j < block_size; j++) {
         const float x = inp[j];
@@ -66,13 +26,27 @@ void q8_quantize_block(const float* inp, Q8Block* out, const int block_size) {
 }
 
 
-void q8_dequantize_block(const Q8Block* inp, float* out, const int block_size) {
-    //  = globs::q8_block_size;
-
+static void q8_dequantize_block(const Q8Block* inp, float* out, const int block_size) {
     const float delta = fp16_to_fp32(inp->delta);
     for (int i = 0; i < block_size; i++) {
         out[i] = inp->data[i] * delta;
     }
+}
+
+[[nodiscard]]
+Qint8 q8_quantize_single(float x, float delta) {
+    const float id = delta ? 1.0f/delta : 0.0f;
+
+    const float x0 = x * id;
+    const Qint8 quantized = static_cast<Qint8>(roundf(x0));
+
+    return quantized;
+}
+
+
+[[nodiscard]]
+float q8_dequantize_single(Qint8 x, float delta) {
+    return x * delta;
 }
 
 void q4_dequantize_block(const Q4Block* inp, float* out) {
@@ -109,12 +83,6 @@ void q8_quantize_row(const float* inp, Q8Block* out, const int rowsize) {
     }
 }
 
-void q8_quantize_row_delta(const float* inp, Qint8* out, const float delta, const int rowsize) {
-    for (int i = 0; i < rowsize; i++) {
-        out[i] = q8_quantize_single(inp[i], delta);
-    }
-}
-
 void q8_dequantize_row(const Q8Block* inp, float* out, int rowsize) {
     const int block_size = globs::q8_block_size;
     const int n_blocks = rowsize / block_size;
@@ -142,7 +110,7 @@ void q4_dequantize_row(const Q4Block* inp, float* out, int rowsize) {
     }
 }
 
-inline void q8_dequantize_row_delta(const Qint8* x, float* out, float delta, int size) {
+void q8_dequantize_row_delta(const Qint8* x, float* out, float delta, int size) {
     for (int i = 0; i < size; i++) {
         const Qint8 x_val = x[i];
         out[i] = x_val * delta;

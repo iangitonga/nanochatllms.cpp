@@ -4,6 +4,7 @@
 
 #include "modules.h"
 #include "ops.h"
+#include "utils.h"
 
 
 namespace gten {
@@ -174,7 +175,7 @@ Tensor Multiply::forward(Tensor &inp0, const Tensor &inp1, const int start_pos)
 
     if (inplace_)
     {
-        ops::mul_inplace(inp0, inp1, start_pos);
+        ops::multiply_inplace(inp0, inp1, start_pos);
 
         return inp0;
     } else 
@@ -183,7 +184,7 @@ Tensor Multiply::forward(Tensor &inp0, const Tensor &inp1, const int start_pos)
         const int n_embd = inp0.dimsize(1);
         acv.resize({n_ctx, n_embd});
 
-        ops::mul(inp0, inp1, acv, start_pos);
+        ops::multiply(inp0, inp1, acv, start_pos);
 
         return acv;
     }
@@ -230,7 +231,6 @@ Tensor RotaryEmbedding::forward(Tensor& inp, const int start_pos)
 {
     Timer timer{&exec_time};
 
-    const int n_ctx = inp.dimsize(0);
     ops::rotary_emb(inp, d_head_, rope_pct_, start_pos);
 
     return inp;
@@ -289,12 +289,12 @@ AttentionBlock::AttentionBlock(int n_heads, int n_embd, int n_query_groups, int 
       attn{SelfAttention(n_heads, n_embd, n_query_groups, max_ctx, dtype)},
       inp_res{Residual(max_ctx, n_embd, dtype.adtype)},
       ffn_norm{RMSNorm(n_embd, max_ctx, dtype)},
-      ffn_mul{Multiply(max_ctx, n_mlp, dtype.adtype, /*inplace=*/true)},
       ffn_gate_proj{Linear(n_embd, n_mlp, max_ctx, dtype)},
       ffn_up_proj{Linear(n_embd, n_mlp, max_ctx, dtype)},
+      ffn_silu{SiLU(max_ctx, n_mlp, dtype.adtype, /*inplace=*/true)},
+      ffn_mul{Multiply(max_ctx, n_mlp, dtype.adtype, /*inplace=*/true)},
       ffn_down_proj{Linear(n_mlp, n_embd, max_ctx, dtype)},
-      attn_res{Residual(max_ctx, n_embd, dtype.adtype)},
-      ffn_silu{SiLU(max_ctx, n_mlp, dtype.adtype, /*inplace=*/true)}
+      attn_res{Residual(max_ctx, n_embd, dtype.adtype)}
 {
 }
 
@@ -322,12 +322,12 @@ AttentionBlock2::AttentionBlock2(int n_heads, int n_embd, int n_query_groups, in
       attn{SelfAttention(n_heads, n_embd, n_query_groups, max_ctx, dtype, rope_pct, /*qkv_bias=*/qkv_bias)},
       inp_res{Residual(max_ctx, n_embd, dtype.adtype)},
       ffn_norm{LayerNorm(n_embd, max_ctx, dtype)},
-      ffn_mul{Multiply(max_ctx, n_mlp, dtype.adtype, /*inplace=*/true)},
       ffn_gate_proj{Linear(n_embd, n_mlp, max_ctx, dtype)},
       ffn_up_proj{Linear(n_embd, n_mlp, max_ctx, dtype)},
+      ffn_silu{SiLU(max_ctx, n_mlp, dtype.adtype, /*inplace=*/true)},
+      ffn_mul{Multiply(max_ctx, n_mlp, dtype.adtype, /*inplace=*/true)},
       ffn_down_proj{Linear(n_mlp, n_embd, max_ctx, dtype)},
-      attn_res{Residual(max_ctx, n_embd, dtype.adtype)},
-      ffn_silu{SiLU(max_ctx, n_mlp, dtype.adtype, /*inplace=*/true)}
+      attn_res{Residual(max_ctx, n_embd, dtype.adtype)}
 {
 }
 

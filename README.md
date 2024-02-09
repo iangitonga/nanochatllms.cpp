@@ -12,7 +12,20 @@ implemented in fp16, 8-bit and 4-bit formats. This project was inspired by
 2. TinyLlama-1.1B-Chat-v0.4 [source](https://github.com/jzhang38/TinyLlama)
 
 
-## Metrics
+## Build and run
+```
+git clone https://github.com/iangitonga/nanochatllms.cpp
+cmake -S . -B build/
+cmake --build build/ --config Release
+build/bin/nanochat -m tinyllama -p "Give three tips on staying healthy."
+```
+
+To see all the available options, run
+```
+build/bin/nanochat --help
+```
+
+## Sample Metrics
 
 **Note:** Performance was recorded on a Intel-Xeon CPU @ 2.20GHz with two cores with AVX enabled.
 
