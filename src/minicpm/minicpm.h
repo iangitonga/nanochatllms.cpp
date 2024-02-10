@@ -18,6 +18,9 @@ struct MiniCPMConfig {
     const int dim_model_base = 256;
     const float scale_depth = 1.4f;
     const int eos = 2;
+    const int fp16_size_mb = 5450;
+    const int q8_size_mb = 2900;
+    const int q4_size_mb = 1530;
 };
 
 static const MiniCPMConfig minicpm_cfg = MiniCPMConfig{};
@@ -59,8 +62,4 @@ private:
     RMSNorm norm_;
     std::vector<MiniCPMAttentionBlock> blocks_;
     Tensor res_scratch; // Used to hold a tensor copy for residual ops.
-
-public:
-    int64_t load_time = 0;
-    int64_t sample_time = 0;
 };

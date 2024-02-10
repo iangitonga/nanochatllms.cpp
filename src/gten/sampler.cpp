@@ -25,7 +25,7 @@ void greedy_sample(std::string& prompt, Model* model, Tokenizer* tokenizer, bool
         const int start_pos = (i == 0) ? 0 : input.numel() - 1; 
         Tensor logits = model->logits(input, start_pos);
 
-        Timer sample_timer{&model->sample_time};
+        Timer sample_timer{&model->sample_time_ms};
 
         const int logits_size = logits.numel();
         const float *logits_data = logits.data_ptr<float>();
@@ -85,7 +85,7 @@ void topk_sample(std::string& prompt, Model* model, Tokenizer* tokenizer, float 
         const int start_pos = (i == 0) ? 0 : input.numel() - 1; 
         gten::Tensor logits = model->logits(input, start_pos);
 
-        Timer sample_timer{&model->sample_time};
+        Timer sample_timer{&model->sample_time_ms};
 
         const float* logits_data = logits.data_ptr<float>();
 

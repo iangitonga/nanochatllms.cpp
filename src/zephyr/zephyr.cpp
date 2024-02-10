@@ -7,6 +7,40 @@
 using namespace gten;
 
 
+ZephyrBlock::ZephyrBlock(int n_heads, int n_embd, int n_query_groups, int n_mlp, int max_ctx, ModuleDtype dtype, float rope_pct)
+    : attn_norm{LayerNorm(n_embd, max_ctx, dtype)},
+      attn{SelfAttention(n_heads, n_embd, n_query_groups, max_ctx, dtype, rope_pct, /*qkv_bias=*/true)},
+      inp_res{Residual(max_ctx, n_embd, dtype.adtype)},
+      ffn_norm{LayerNorm(n_embd, max_ctx, dtype)},
+      ffn_gate_proj{Linear(n_embd, n_mlp, max_ctx, dtype)},
+      ffn_up_proj{Linear(n_embd, n_mlp, max_ctx, dtype)},
+      ffn_silu{SiLU(max_ctx, n_mlp, dtype.adtype, /*inplace=*/true)},
+      ffn_mul{Multiply(max_ctx, n_mlp, dtype.adtype, /*inplace=*/true)},
+      ffn_down_proj{Linear(n_mlp, n_embd, max_ctx, dtype)},
+      attn_res{Residual(max_ctx, n_embd, dtype.adtype)}
+{
+}
+
+Tensor ZephyrBlock::ffn_forward(const Tensor& inp, const int start_pos) {
+    // self.w2(F.silu(self.w1(x)) * self.w3(x))
+    Tensor w1 = ffn_gate_proj.forward(inp, start_pos);
+    const Tensor w3 = ffn_up_proj.forward(inp, start_pos);
+    Tensor sw1 = ffn_silu.forward(w1, start_pos);
+    const Tensor w1w2 = ffn_mul.forward(sw1, w3, start_pos);
+    Tensor out = ffn_down_proj.forward(w1w2, start_pos);
+
+    return out;
+}
+
+
+Tensor ZephyrBlock::forward(Tensor &inp, const int start_pos)
+{
+    Tensor h = inp_res.forward(inp, attn.forward(attn_norm.forward(inp, start_pos), start_pos), start_pos);
+    Tensor out = attn_res.forward(h, ffn_forward(ffn_norm.forward(h, start_pos), start_pos), start_pos);
+    return out;
+}
+
+
 Zephyr::Zephyr(const int n_ctx, ModuleDtype dtype)
     : Model(n_ctx, zephyr_cfg.max_ctx),
       m_dtype{dtype},
@@ -17,10 +51,11 @@ Zephyr::Zephyr(const int n_ctx, ModuleDtype dtype)
     blocks_.reserve(zephyr_cfg.n_layers);
     for (int i = 0; i < zephyr_cfg.n_layers; i++) {
         blocks_.push_back(
-            AttentionBlock2(zephyr_cfg.n_heads, zephyr_cfg.n_embd, zephyr_cfg.n_query_groups, zephyr_cfg.n_ffn, n_ctx, dtype, zephyr_cfg.rope_pct, /*qkv_bias=*/true)
+            ZephyrBlock(zephyr_cfg.n_heads, zephyr_cfg.n_embd, zephyr_cfg.n_query_groups, zephyr_cfg.n_ffn, n_ctx, dtype, zephyr_cfg.rope_pct)
         );
     }
 }
+
 
 Tensor Zephyr::logits(const Tensor& tokens, const int start_pos) {
     if (tokens.numel() > max_inference_ctx) {
@@ -43,7 +78,7 @@ Tensor Zephyr::logits(const Tensor& tokens, const int start_pos) {
 
 void Zephyr::load_from_ckpt(std::ifstream &ckpt)
 {
-    Timer load_timer{&load_time};
+    Timer load_timer{&load_time_ms};
 
     const int64_t expected_magic = 0x454c49464e455447;
     int64_t magic;
@@ -116,71 +151,56 @@ void Zephyr::load_from_ckpt(std::ifstream &ckpt)
 
 void Zephyr::print_perf(const int n_pred_tokens)
 {
-    int64_t linear_time = 0;
-    int64_t attn_time = 0;
-    int64_t non_linear_time = 0;
+    int linear_time_ms = 0;
+    int attn_time_ms = 0;
+    int non_linear_time_ms = 0;
 
     {
-        const int64_t emb_time = tok_emb_.exec_time;
-        int64_t norm_time = norm_.exec_time;
-        int64_t res_time = 0;
-        int64_t rope_time = 0;
-        int64_t activ_time = 0;
-        int64_t mul_time = 0;
-        linear_time += lm_head_.exec_time;
+        const int emb_time = tok_emb_.exec_time;
+        int norm_time = norm_.exec_time;
+        int res_time = 0;
+        int rope_time = 0;
+        int activ_time = 0;
+        int mul_time = 0;
+        linear_time_ms += lm_head_.exec_time;
 
         for (const auto& b : blocks_) {
             norm_time += b.attn_norm.exec_time + b.ffn_norm.exec_time;
-            attn_time += b.attn.exec_time_attn;
+            attn_time_ms += b.attn.exec_time_attn;
             res_time  += b.attn_res.exec_time + b.inp_res.exec_time;
             rope_time += b.attn.q_rope.exec_time + b.attn.k_rope.exec_time;
             activ_time += b.ffn_norm.exec_time;
             mul_time  += b.ffn_mul.exec_time;
-            linear_time += b.attn.query.exec_time + b.attn.key.exec_time + b.attn.value.exec_time + b.attn.qkv_proj.exec_time;
-            linear_time += b.ffn_gate_proj.exec_time + b.ffn_up_proj.exec_time + b.ffn_down_proj.exec_time;
+            linear_time_ms += b.attn.query.exec_time + b.attn.key.exec_time + b.attn.value.exec_time + b.attn.qkv_proj.exec_time;
+            linear_time_ms += b.ffn_gate_proj.exec_time + b.ffn_up_proj.exec_time + b.ffn_down_proj.exec_time;
         }
 
-        non_linear_time = emb_time + norm_time + res_time + rope_time + activ_time + mul_time;
+        non_linear_time_ms = emb_time + norm_time + res_time + rope_time + activ_time + mul_time;
     }
-    const int64_t tot_inf_time = linear_time + attn_time + non_linear_time;
+    const int tot_inf_time_ms = linear_time_ms + attn_time_ms + non_linear_time_ms;
 
-    const int64_t tensor_mem = Tensor::s_tensor_alloc_bytes;
-    int64_t weights_mem = 0;
+    const int total_tensor_mem_mb = Tensor::s_tensor_alloc_bytes / 1000000;
 
-    {
-        const auto bytes = [](const Tensor& t) { return t.nbytes(); };
+    int weights_mem_mb;
+    if (m_dtype.wdtype== kFloat16) { weights_mem_mb = zephyr_cfg.fp16_size_mb; }
+    else if (m_dtype.wdtype== kQint8) { weights_mem_mb = zephyr_cfg.q8_size_mb; }
+    else { weights_mem_mb = zephyr_cfg.q4_size_mb; }
 
-        weights_mem += bytes(tok_emb_.weight);
-        weights_mem += bytes(norm_.weight) + bytes(norm_.bias);
-        weights_mem += bytes(lm_head_.weight);
+    const PerformanceMetrics metrics = {
+        .tokens_generated = n_pred_tokens,
+        .throughput_tok_per_sec = 1000.0f / (float)(tot_inf_time_ms/n_pred_tokens),
+        .inference_total_secs = tot_inf_time_ms / 1000,
+        .sample_time_secs = sample_time_ms / 1000,
+        .load_time_secs = load_time_ms / 1000,
+        .total_runtime_secs = (load_time_ms + sample_time_ms + tot_inf_time_ms) / 1000,
+        .inference_time_per_tok_ms = tot_inf_time_ms / n_pred_tokens,
+        .linear_time_per_tok_ms = linear_time_ms / n_pred_tokens,
+        .attn_time_per_tok_ms = attn_time_ms / n_pred_tokens,
+        .other_time_ms = non_linear_time_ms / n_pred_tokens,
+        .mem_usage_total_mb = total_tensor_mem_mb,
+        .mem_usage_weights_mb = weights_mem_mb,
+        .mem_usage_acvs_mb = total_tensor_mem_mb - weights_mem_mb
+    };
 
-        for (const auto& b : blocks_) {
-            weights_mem += bytes(b.attn_norm.weight) + bytes(b.attn_norm.bias) + bytes(b.ffn_norm.weight) + bytes(b.ffn_norm.bias);
-            weights_mem += bytes(b.attn.query.weight) + bytes(b.attn.key.weight) + bytes(b.attn.value.weight) + bytes(b.attn.qkv_proj.weight);
-            weights_mem += bytes(b.attn.query.bias) + bytes(b.attn.key.bias) + bytes(b.attn.value.bias);
-            weights_mem += bytes(b.ffn_gate_proj.weight) + bytes(b.ffn_up_proj.weight) + bytes(b.ffn_down_proj.weight);
-        }
-    }
-
-    const int acv_mem = tensor_mem - weights_mem;
-
-
-    std::cout << "\n-------------------------------\n";
-    std::cout << " " << "PERFORMANCE\n";
-    std::cout << "-------------------------------\n";
-    std::cout << " " << "Throughput [tok/s]  : " << std::setw(5) << 1000.0f / (float)(tot_inf_time/n_pred_tokens) << "\n";
-    std::cout << " " << "Inference [per tok] : " << std::setw(5) << tot_inf_time/n_pred_tokens << "ms\n";
-    std::cout << " " << "Sample time         : " << std::setw(5) << sample_time << "ms\n";
-    std::cout << " " << "Load time           : " << std::setw(5) << load_time << "ms\n";
-    std::cout << " " << "Inference [total]   : " << std::setw(5) << tot_inf_time << "ms\n";
-    std::cout << " " << "Total runtime       : " << std::setw(5) << load_time + sample_time + tot_inf_time << "ms\n";
-    std::cout << "-------------------------------\n";
-    std::cout << " " << "Mem usage [total]   : " << std::setw(4) << tensor_mem/1000000 << "MB\n";
-    std::cout << " " << "Mem usage [model]   : " << std::setw(4) << weights_mem/1000000 << "MB\n";
-    std::cout << " " << "Mem usage [actvs]   : " << std::setw(4) << acv_mem/1000000 << "MB\n";
-    std::cout << "-------------------------------\n";
-    std::cout << " " << "Lin time [per tok]  : " << std::setw(5) << linear_time/n_pred_tokens << "ms\n";
-    std::cout << " " << "Attn time [per tok] : " << std::setw(5) << attn_time/n_pred_tokens << "ms\n";
-    std::cout << " " << "Other     [per tok] : " << std::setw(5) << non_linear_time/n_pred_tokens << "ms\n";
-    std::cout << "-------------------------------\n\n";
+    print_performance_metrics(metrics);
 }

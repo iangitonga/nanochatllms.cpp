@@ -22,7 +22,7 @@ public:
 public:
     Tensor weight;
     Tensor emb_acv;
-    int64_t exec_time{0};
+    int exec_time{0};
 };
 
 /// Provides an embedding table lookup for tokens.
@@ -40,8 +40,8 @@ public:
     Tensor weight;
     Tensor emb_acv;
     Tensor proj_acv;
-    int64_t emb_exec_time{0};
-    int64_t proj_exec_time{0};
+    int emb_exec_time{0};
+    int proj_exec_time{0};
 };
 
 
@@ -53,7 +53,7 @@ public:
 public:
     Tensor weight;
     Tensor acv;
-    int64_t exec_time{0};
+    int exec_time{0};
 };
 
 
@@ -67,7 +67,7 @@ public:
     Tensor weight;
     Tensor bias;
     Tensor acv;
-    int64_t exec_time{0};
+    int exec_time{0};
 
 private:
     int max_ctx_;
@@ -81,7 +81,7 @@ public:
 
 public:
     Tensor acv;
-    int64_t exec_time{0};
+    int exec_time{0};
 };
 
 
@@ -96,7 +96,7 @@ public:
     Tensor weight;
     Tensor bias;
     Tensor acv;
-    int64_t exec_time{0};
+    int exec_time{0};
 
 private:
     int max_ctx_;
@@ -112,7 +112,7 @@ public:
 public:
     Tensor weight;
     Tensor acv;
-    int64_t exec_time{0};
+    int exec_time{0};
 };
 
 class Multiply {
@@ -123,7 +123,7 @@ public:
 
 public:
     Tensor acv;
-    int64_t exec_time{0};
+    int exec_time{0};
 
 private:
     bool inplace_{false};
@@ -138,7 +138,7 @@ public:
 public:
     Tensor acv;
     bool inplace_{false};
-    int64_t exec_time{0};
+    int exec_time{0};
 };
 
 
@@ -149,7 +149,7 @@ public:
     Tensor forward(Tensor& inp, const int start_pos=0);
 
 public:
-    int64_t exec_time{0};
+    int exec_time{0};
 
 private:
     int d_head_;
@@ -171,7 +171,7 @@ public:
     Tensor qkv_acv;
     RotaryEmbedding q_rope;
     RotaryEmbedding k_rope;
-    int64_t exec_time_attn{0};
+    int exec_time_attn{0};
 
 private:
     int32_t n_heads_;
@@ -179,46 +179,6 @@ private:
 
 private:
     Tensor masked_qkv_attn(const Tensor& q, const Tensor& k, const Tensor& v, const int start_pos);
-};
-
-
-class AttentionBlock {
-public:
-    AttentionBlock(int n_heads, int d_embed, int n_query_groups, int n_mlp, int max_ctx, ModuleDtype dtype);
-    Tensor forward(Tensor& inp, const int start_pos);
-    Tensor ffn_forward(const Tensor& inp, const int start_pos=0);
-
-public:
-    RMSNorm attn_norm;
-    SelfAttention attn;
-    Residual inp_res;
-    RMSNorm ffn_norm;
-    Linear ffn_gate_proj;
-    Linear ffn_up_proj;
-    SiLU ffn_silu;
-    Multiply ffn_mul;
-    Linear ffn_down_proj;
-    Residual attn_res;
-};
-
-/// TODO: Merge with AttentionBlock.
-class AttentionBlock2 {
-public:
-    AttentionBlock2(int n_heads, int d_embed, int n_query_groups, int n_mlp, int max_ctx, ModuleDtype dtype, float rope_pct, bool qkv_bias=false);
-    Tensor forward(Tensor& inp, const int start_pos);
-    Tensor ffn_forward(const Tensor& inp, const int start_pos=0);
-
-public:
-    LayerNorm attn_norm;
-    SelfAttention attn;
-    Residual inp_res;
-    LayerNorm ffn_norm;
-    Linear ffn_gate_proj;
-    Linear ffn_up_proj;
-    SiLU ffn_silu;
-    Multiply ffn_mul;
-    Linear ffn_down_proj;
-    Residual attn_res;
 };
 
 } // namespace gten

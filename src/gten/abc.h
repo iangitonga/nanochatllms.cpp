@@ -11,8 +11,8 @@ namespace gten {
 // Base class that all models must inherit from.
 class Model {
 public:
-    int64_t load_time = 0;
-    int64_t sample_time = 0;
+    int load_time_ms = 0;
+    int sample_time_ms = 0;
     int max_inference_ctx;
     int max_train_ctx;
 
@@ -54,11 +54,3 @@ public:
 };
 
 } //namespace gten
-
-
-/*
-
-if model_name == tinyllama
-    model = TinyLLama(a, b)
-
-*/

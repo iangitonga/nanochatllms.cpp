@@ -1,5 +1,6 @@
-#include "gten_types.h"
+#include <iomanip>
 
+#include "gten_types.h"
 #include "utils.h"
 
 
@@ -59,7 +60,7 @@ void read_layer_header(std::ifstream& fin, bool debug) {
     }
 }
 
-Timer::Timer(int64_t* time_tracker)
+Timer::Timer(int* time_tracker)
     : time_tracker_{time_tracker}, start_time_{std::chrono::high_resolution_clock::now()}
 { 
 }
@@ -73,8 +74,32 @@ void Timer::stop() {
     int64_t start = std::chrono::time_point_cast<std::chrono::milliseconds>(start_time_).time_since_epoch().count();
     int64_t end = std::chrono::time_point_cast<std::chrono::milliseconds>(end_time).time_since_epoch().count();
     int64_t duration = end - start;
-    *time_tracker_ += duration;
+    *time_tracker_ += static_cast<int>(duration);
     stopped_ = true;
+}
+
+
+void print_performance_metrics(const PerformanceMetrics& metrics)
+{
+    std::cout << "\n---------------------------------------\n";
+    std::cout << " " << "PERFORMANCE\n";
+    std::cout << "---------------------------------------\n";
+    std::cout << " " << "Tokens generated         : " << std::setw(4) << metrics.tokens_generated        << "\n";
+    std::cout << " " << "Throughput (toks/sec)    : " << std::fixed << std::setprecision(1) << std::setw(4) << metrics.throughput_tok_per_sec  << "\n";
+    std::cout << " " << "Sample time              : " << std::setw(4) << metrics.sample_time_secs        << "s\n";
+    std::cout << " " << "Load time                : " << std::setw(4) << metrics.load_time_secs          << "s\n";
+    std::cout << " " << "Inference time           : " << std::setw(4) << metrics.inference_total_secs    << "s\n";
+    std::cout << " " << "Total runtime            : " << std::setw(4) << metrics.total_runtime_secs      << "s\n";
+    std::cout << "---------------------------------------\n";
+    std::cout << " " << "Mem usage (total)        : " << std::setw(4) << metrics.mem_usage_total_mb   << "MB\n";
+    std::cout << " " << "Mem usage (weights)      : " << std::setw(4) << metrics.mem_usage_weights_mb << "MB\n";
+    std::cout << " " << "Mem usage (actvs)        : " << std::setw(4) << metrics.mem_usage_acvs_mb    << "MB\n";
+    std::cout << "---------------------------------------\n";
+    std::cout << " " << "Inference time (per tok) : " << std::setw(4) << metrics.inference_time_per_tok_ms << "ms\n";
+    std::cout << " " << "Lin time       (per tok) : " << std::setw(4) << metrics.linear_time_per_tok_ms    << "ms\n";
+    std::cout << " " << "Attn time      (per tok) : " << std::setw(4) << metrics.attn_time_per_tok_ms      << "ms\n";
+    std::cout << " " << "Other          (per tok) : " << std::setw(4) << metrics.other_time_ms             << "ms\n";
+    std::cout << "---------------------------------------\n\n";
 }
 
 } // namespace gten

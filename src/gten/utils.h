@@ -16,13 +16,32 @@ void read_into_weight(std::ifstream& fin, gten::Tensor& tensor, ModuleDtype dtyp
 void read_layer_header(std::ifstream& fin, bool debug = false);
 
 
+struct PerformanceMetrics {
+    int tokens_generated = 0;
+    float throughput_tok_per_sec = 0;
+    int inference_total_secs = 0;    
+    int sample_time_secs = 0;        
+    int load_time_secs = 0;          
+    int total_runtime_secs = 0;
+    int inference_time_per_tok_ms = 0;
+    int linear_time_per_tok_ms = 0;   
+    int attn_time_per_tok_ms = 0;     
+    int other_time_ms = 0;             
+    int mem_usage_total_mb = 0;  
+    int mem_usage_weights_mb = 0;
+    int mem_usage_acvs_mb = 0;
+};
+
+void print_performance_metrics(const PerformanceMetrics& metrics);
+
+
 class Timer {
 public:
-    Timer(int64_t* time_tracker);
+    Timer(int* time_tracker);
     ~Timer();
     void stop();
 private:
-    int64_t* time_tracker_;
+    int* time_tracker_;
     std::chrono::time_point<std::chrono::high_resolution_clock> start_time_;
     bool stopped_ = false;
 };
