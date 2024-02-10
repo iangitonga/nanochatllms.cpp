@@ -25,7 +25,7 @@ macro(CHECK_FOR_AVX)
     include(CheckCXXSourceRuns)
     set(CMAKE_REQUIRED_FLAGS)
 
-    # Check for AVX
+    # Set the flags for compilation of the source below.
     if (MSVC)
         if (NOT MSVC_VERSION LESS 1600)
             set(CMAKE_REQUIRED_FLAGS "/arch:AVX")
@@ -69,8 +69,60 @@ macro(CHECK_FOR_AVX)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${AVX_FLAGS}")
 endmacro(CHECK_FOR_AVX)
 
+
+# Check for the presence of mf16c and figure out the flags to use for it.
+# mf16c allows loading and writing fp16 values and converting them.
+# TODO: Does AVX detection imply f16? in that case no need to check for it here!
+macro(CHECK_FOR_F16C)
+    include(CheckCXXSourceRuns)
+    set(CMAKE_REQUIRED_FLAGS)
+
+    # Set the flags for compilation of the source below.
+    if (NOT MSVC)
+        set(CMAKE_REQUIRED_FLAGS "-mavx -mf16c")
+    endif ()
+
+    check_cxx_source_runs("
+        #include <immintrin.h>
+        #include <cstdint>
+        
+        int main()
+        {
+            const float flts[8] = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f};
+            //                  1.0    2.0    3.0    4.0    5.0    6.0    7.0    8.0
+            const uint16_t halfs[9] = {15360, 16384, 16896, 17408, 17664, 17920, 18176, 18432};
+            const __m256 cvt_flts = _mm256_cvtph_ps(_mm_loadu_si128((__m128i_u *)halfs));
+            const float* cvt_flts_ptr = (float*)&cvt_flts;
+            for (int i = 0; i < 8; ++i) {
+                if (cvt_flts_ptr[i] != flts[i]) {
+                    return -1;
+                } 
+            }
+            uint16_t cvt_halfs[8];
+            _mm_storeu_si128((__m128i_u *)cvt_halfs, _mm256_cvtps_ph(cvt_flts, 0));
+            for (int i = 0; i < 8; ++i) {
+                if (cvt_halfs[i] != halfs[i]) {
+                    return -1;
+                } 
+            }
+            return 0;
+        }"
+            HAVE_FPC_EXTENSIONS)
+
+    # Set Flags according to check results
+    # TODO: support MSVC.
+    if (NOT MSVC)
+        if (HAVE_FPC_EXTENSIONS)
+            message("GTEN LOG: F16C detected")
+            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mf16c")
+        endif()
+    endif ()
+endmacro(CHECK_FOR_F16C)
+
+
 # Include AVX if available.
 CHECK_FOR_AVX()
+CHECK_FOR_F16C()
 
 
 # Collect all the source files.
