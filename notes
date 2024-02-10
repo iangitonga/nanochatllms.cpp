@@ -1,13 +1,12 @@
 TODO:
 
-Test all models.  [DONE]
-Module Blocks.    [DONE]
-check n_predict
-Rename class vars. prefix m_ for public c_ for consts, s_ for statics.
-Normalize params
-Refactor ops. OPEENMP, AVX FLAGS
 detect __mf16c__ in cmake
+Refactor ops. OPEENMP, AVX FLAGS
+optimize ops.
+
 Github actions.
-optimize.
+
+Tests?
 Docs?
+Normalize params??
 

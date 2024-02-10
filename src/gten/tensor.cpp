@@ -28,13 +28,13 @@ static void tensor_data_deleter(uint8_t* ptr) {
 }
 
 Tensor::Tensor(const std::vector<int>& shape, Dtype dtype)
-    : dtype_{dtype}
+    : M_dtype{dtype}
 {
     validate_shape(shape);
-    shape_ = shape;
+    m_shape = shape;
     set_strides_from_shape(shape);
     const int numel = numel_from_shape(shape);
-    numel_ = numel;
+    m_numel = numel;
 
     int alloc_bytes;
     if (dtype == kQint8 && shape.size() != 1) {
@@ -64,8 +64,8 @@ Tensor::Tensor(const std::vector<int>& shape, Dtype dtype)
     void* raw_data_ptr = std::malloc(alloc_bytes);
     GTEN_ASSERTM(raw_data_ptr, "Failed to allocate %dMB of memory.", alloc_bytes / 1000000);
 
-    data_ptr_ = std::shared_ptr<uint8_t>(static_cast<uint8_t*>(raw_data_ptr), tensor_data_deleter);
-    storage_size_ = alloc_bytes;
+    m_data_ptr = std::shared_ptr<uint8_t>(static_cast<uint8_t*>(raw_data_ptr), tensor_data_deleter);
+    m_storage_size = alloc_bytes;
     Tensor::s_tensor_alloc_bytes += alloc_bytes;
 }
 
@@ -75,17 +75,17 @@ static void empty_deleter(uint8_t* ptr) {  }
 
 /// TODO: Add lock on the data ptr. [Unwritable tensor]. 
 Tensor::Tensor(const void* data_ptr, const std::vector<int>& shape, Dtype dtype)
-    : dtype_{dtype}
+    : M_dtype{dtype}
 {
     GTEN_ASSERTM(data_ptr != nullptr, "Expected a non-null pointer but got a nullptr.");
     uint8_t* real_ptr = (uint8_t*)data_ptr;
     // An empty deleter ensures we do not delete the data since we do not own it.
-    data_ptr_ = std::shared_ptr<uint8_t>(real_ptr, empty_deleter);
+    m_data_ptr = std::shared_ptr<uint8_t>(real_ptr, empty_deleter);
     validate_shape(shape);
-    shape_ = shape;
+    m_shape = shape;
     set_strides_from_shape(shape);
-    numel_ = numel_from_shape(shape);
-    storage_size_ = 0;
+    m_numel = numel_from_shape(shape);
+    m_storage_size = 0;
 }
 
 void Tensor::validate_shape(const std::vector<int> &shape) const
@@ -128,12 +128,12 @@ void Tensor::resize(const std::vector<int>& new_shape) {
     validate_shape(new_shape);
     const int new_size = numel_from_shape(new_shape) * itemsize();
     GTEN_ASSERTM(
-        new_size <= storage_size_,
+        new_size <= m_storage_size,
         "The new shape provided %s with cap=%d exceeds shape %s with cap=%d.",
-        shape_to_str(new_shape).c_str(), new_size, shape_str().c_str(), storage_size_);
-    shape_ = new_shape;
+        shape_to_str(new_shape).c_str(), new_size, shape_str().c_str(), m_storage_size);
+    m_shape = new_shape;
     set_strides_from_shape(new_shape);
-    numel_ = numel_from_shape(new_shape);
+    m_numel = numel_from_shape(new_shape);
 }
 
 
@@ -143,16 +143,16 @@ void Tensor::set_strides_from_shape(const std::vector<int>& shape) {
     // 3-dim: d2*d3, d3, 1
     switch (shape.size()) {
         case 1: {
-            strides_ = {1};
+            m_strides = {1};
         } break;
         case 2: {
             const int d1 = shape[1];
-            strides_ = {d1, 1};
+            m_strides = {d1, 1};
         } break;
         case 3: {
             const int d1 = shape[1];
             const int d2 = shape[2];
-            strides_ = {d1*d2, d2, 1};
+            m_strides = {d1*d2, d2, 1};
         } break;
     }
 }
@@ -161,11 +161,11 @@ void Tensor::set_strides_from_shape(const std::vector<int>& shape) {
 Tensor Tensor::view(const std::vector<int>& new_shape) const {
     validate_shape(new_shape);
     const int new_numel = numel_from_shape(new_shape);
-    const int old_numel = numel_from_shape(shape_);
+    const int old_numel = numel_from_shape(m_shape);
     GTEN_ASSERTM(new_numel == old_numel, "New shape numel `%d` must be equal with old shape numel `%d`.", new_numel, old_numel);
 
     Tensor out = *this;
-    out.shape_ = new_shape;
+    out.m_shape = new_shape;
     out.set_strides_from_shape(new_shape);
 
     return out;
@@ -175,41 +175,41 @@ Tensor Tensor::view(const std::vector<int>& new_shape) const {
 // Should we create and return a new tensor with the new shape?
 Tensor Tensor::permute(const std::vector<int> &indices)
 {
-    GTEN_ASSERTM(indices.size() == shape_.size(),
+    GTEN_ASSERTM(indices.size() == m_shape.size(),
                 "The dims of indices `%ld` given do not match the tensor dims `%ld`.",
-                indices.size(), shape_.size());
+                indices.size(), m_shape.size());
 
-    std::vector<int> new_shape = shape_;
-    std::vector<int> new_strides = strides_;
+    std::vector<int> new_shape = m_shape;
+    std::vector<int> new_strides = m_strides;
     for (int i = 0; i < int(indices.size()); i++) {
         const int idx = indices[i];
-        new_shape[i] = shape_[idx];
-        new_strides[i] = strides_[idx]; 
+        new_shape[i] = m_shape[idx];
+        new_strides[i] = m_strides[idx]; 
     }
-    shape_ = std::move(new_shape);
-    strides_ = std::move(new_strides);
+    m_shape = std::move(new_shape);
+    m_strides = std::move(new_strides);
     
     return *this;
 }
 
 void Tensor::set_strides(const std::vector<int>& strides)
 {
-    GTEN_ASSERTM(strides.size() == shape_.size(), "The given strides ndims must match shape ndims.");
+    GTEN_ASSERTM(strides.size() == m_shape.size(), "The given strides ndims must match shape ndims.");
     for (int i = 0; i < int(strides.size()); i++) {
     //     if (strides[i] <= 0) {
     //         GTEN_ASSERTM(false, "The stride at index %d, `%d` is invalid.", i, strides[i]);
     //     }
     }
-    strides_ = strides;
+    m_strides = strides;
 }
 
 std::string Tensor::shape_str() const
 {
     std::stringstream s;
     s << "(";
-    for (int i = 0; i < int(shape_.size()); i++) {
-        s << shape_[i];
-        if (i != int(shape_.size()) - 1) {
+    for (int i = 0; i < int(m_shape.size()); i++) {
+        s << m_shape[i];
+        if (i != int(m_shape.size()) - 1) {
             s << ", ";
         }
     }
@@ -221,9 +221,9 @@ std::string Tensor::shape_str() const
 std::string Tensor::strides_str() const {
     std::stringstream s;
     s << "(";
-    for (int i = 0; i < int(strides_.size()); i++) {
-        s << strides_[i];
-        if (i != int(strides_.size()) - 1) {
+    for (int i = 0; i < int(m_strides.size()); i++) {
+        s << m_strides[i];
+        if (i != int(m_strides.size()) - 1) {
             s << ", ";
         }
     }
@@ -253,33 +253,33 @@ void print_vector(const std::vector<int>& vec) {
 void Tensor::print_info() const {
     auto data = data_ptr<void>();
     std::cout << "\nTensor(\n"
-              << "  dtype    : " << dtype_str(dtype_) << "\n"
+              << "  dtype    : " << dtype_str(M_dtype) << "\n"
               << "  shape    : ";
-    print_vector(shape_);
+    print_vector(m_shape);
     std::cout << "  strides  : ";
-    print_vector(strides_);
-    std::cout << "  numel    : " << numel_ << "\n"
+    print_vector(m_strides);
+    std::cout << "  numel    : " << m_numel << "\n"
             //   << "  numel cap: " << storage_size_/itemsize() << "\n"
-              << "  capacity : " << storage_size_ << " bytes\n"
+              << "  capacity : " << m_storage_size << " bytes\n"
               << "  pointer  : "   << data << "\n)\n";
     
 }
 
 void Tensor::print_single(int item_idx, int row_idx, int col_idx, int n_cols) const
 {
-    uint32_t max_cols = dtype_ == kInt32 ? 32 : 8;
-    if (dtype_ == kFloat16) {
+    uint32_t max_cols = M_dtype == kInt32 ? 32 : 8;
+    if (M_dtype == kFloat16) {
         std::cout << std::fixed
                   << std::setprecision(4)
                   << std::setw(7)
                   << fp16_to_fp32(data_ptr<Float16>()[item_idx]);
     }
-    else if (dtype_ == kFloat32) {
+    else if (M_dtype == kFloat32) {
         std::cout << std::fixed
                   << std::setprecision(4)
                   << std::setw(7)
                   << data_ptr<float>()[item_idx];
-    } else if (dtype_ == kQint8) {
+    } else if (M_dtype == kQint8) {
         std::cout << std::fixed
                   << std::setprecision(4)
                   << std::setw(7)
@@ -300,16 +300,16 @@ void Tensor::print_single(int item_idx, int row_idx, int col_idx, int n_cols) co
 void Tensor::print() const
 {
     std::cout << "\n[";
-    const int ndims = shape_.size();
+    const int ndims = m_shape.size();
     if (ndims == 1) {
-        for (int col = 0; col < numel_; col += 1)
-            print_single(col, 0, col, numel_);
+        for (int col = 0; col < m_numel; col += 1)
+            print_single(col, 0, col, m_numel);
     }
     else if (ndims == 2) {
-        const int rows = shape_[0];
-        const int cols = shape_[1];
-        const int st0 = strides_[0];
-        const int st1 = strides_[1];
+        const int rows = m_shape[0];
+        const int cols = m_shape[1];
+        const int st0 = m_strides[0];
+        const int st1 = m_strides[1];
         for (int row = 0; row < rows; row++) {
             if (row == 0) std::cout << "[";
             else std::cout << " [";
@@ -323,12 +323,12 @@ void Tensor::print() const
     }
     else // ndims=3
     {
-        const int chs = shape_[0];
-        const int rows = shape_[1];
-        const int cols = shape_[2];
-        const int st0 = strides_[0];
-        const int st1 = strides_[1];
-        const int st2 = strides_[2];
+        const int chs = m_shape[0];
+        const int rows = m_shape[1];
+        const int cols = m_shape[2];
+        const int st0 = m_strides[0];
+        const int st1 = m_strides[1];
+        const int st2 = m_strides[2];
 
         for (int ch = 0; ch < chs; ch++)
         {

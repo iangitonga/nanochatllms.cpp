@@ -61,21 +61,21 @@ void read_layer_header(std::ifstream& fin, bool debug) {
 }
 
 Timer::Timer(int* time_tracker)
-    : time_tracker_{time_tracker}, start_time_{std::chrono::high_resolution_clock::now()}
+    : m_time_tracker{time_tracker}, m_start_time{std::chrono::high_resolution_clock::now()}
 { 
 }
 
 Timer::~Timer() { stop(); }
 
 void Timer::stop() {
-    if (stopped_)
+    if (m_timer_stopped)
         return;
     auto end_time = std::chrono::high_resolution_clock::now();
-    int64_t start = std::chrono::time_point_cast<std::chrono::milliseconds>(start_time_).time_since_epoch().count();
+    int64_t start = std::chrono::time_point_cast<std::chrono::milliseconds>(m_start_time).time_since_epoch().count();
     int64_t end = std::chrono::time_point_cast<std::chrono::milliseconds>(end_time).time_since_epoch().count();
     int64_t duration = end - start;
-    *time_tracker_ += static_cast<int>(duration);
-    stopped_ = true;
+    *m_time_tracker += static_cast<int>(duration);
+    m_timer_stopped = true;
 }
 
 

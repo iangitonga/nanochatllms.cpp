@@ -32,16 +32,16 @@ public:
     Tensor ffn_forward(const Tensor& inp, const int start_pos=0);
 
 public:
-    LayerNorm attn_norm;
-    SelfAttention attn;
-    Residual inp_res;
-    LayerNorm ffn_norm;
-    Linear ffn_gate_proj;
-    Linear ffn_up_proj;
-    SiLU ffn_silu;
-    Multiply ffn_mul;
-    Linear ffn_down_proj;
-    Residual attn_res;
+    LayerNorm m_attn_norm;
+    SelfAttention m_self_attn;
+    Residual m_inp_res;
+    LayerNorm m_mlp_norm;
+    Linear m_mlp_gate_proj;
+    Linear m_mlp_up_proj;
+    SiLU m_mlp_silu;
+    Multiply m_mlp_mul;
+    Linear m_mlp_down_proj;
+    Residual m_attn_res;
 };
 
 
@@ -56,8 +56,8 @@ public:
     void print_perf(const int n_pred_tokens);
 
 private:
-    Embedding tok_emb_;
-    LayerNorm norm_;
-    EmbeddingLinear lm_head_;
-    std::vector<ZephyrBlock> blocks_;
+    Embedding m_tok_emb;
+    LayerNorm m_norm;
+    EmbeddingLinear m_lm_head;
+    std::vector<ZephyrBlock> m_blocks;
 };

@@ -10,7 +10,7 @@ namespace gten {
 
 void greedy_sample(std::string& prompt, Model* model, Tokenizer* tokenizer, bool showstat)
 {
-    const int n_predict = std::min(model->max_inference_ctx, model->max_train_ctx);
+    const int n_predict = std::min(model->m_max_inference_ctx, model->m_max_train_ctx);
     std::vector<int> tokens = tokenizer->encode(prompt);
     tokens.reserve(n_predict);
 
@@ -25,7 +25,7 @@ void greedy_sample(std::string& prompt, Model* model, Tokenizer* tokenizer, bool
         const int start_pos = (i == 0) ? 0 : input.numel() - 1; 
         Tensor logits = model->logits(input, start_pos);
 
-        Timer sample_timer{&model->sample_time_ms};
+        Timer sample_timer{&model->m_sample_time_ms};
 
         const int logits_size = logits.numel();
         const float *logits_data = logits.data_ptr<float>();
@@ -42,7 +42,7 @@ void greedy_sample(std::string& prompt, Model* model, Tokenizer* tokenizer, bool
 
         const int pred_token = max_index;
 
-        if (pred_token == tokenizer->eos_token) {
+        if (pred_token == tokenizer->m_eos_token) {
             break;
         }
 
@@ -65,7 +65,7 @@ void topk_sample(std::string& prompt, Model* model, Tokenizer* tokenizer, float 
     // TODO: fix topk max situation.
     top_k = std::min(top_k, 1000);
     temp = std::min(temp, 2.0f);
-    const int n_predict = std::min(model->max_inference_ctx, model->max_train_ctx);
+    const int n_predict = std::min(model->m_max_inference_ctx, model->m_max_train_ctx);
 
     std::random_device rd;
     std::mt19937 gen(rd());
@@ -85,7 +85,7 @@ void topk_sample(std::string& prompt, Model* model, Tokenizer* tokenizer, float 
         const int start_pos = (i == 0) ? 0 : input.numel() - 1; 
         gten::Tensor logits = model->logits(input, start_pos);
 
-        Timer sample_timer{&model->sample_time_ms};
+        Timer sample_timer{&model->m_sample_time_ms};
 
         const float* logits_data = logits.data_ptr<float>();
 
@@ -125,7 +125,7 @@ void topk_sample(std::string& prompt, Model* model, Tokenizer* tokenizer, float 
 
         std::discrete_distribution dist(probs.begin(), probs.end());
         int pred_token = dist(gen);
-        if (pred_token == tokenizer->eos_token) {
+        if (pred_token == tokenizer->m_eos_token) {
             break;
         }
 

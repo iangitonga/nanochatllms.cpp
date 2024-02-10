@@ -8,26 +8,26 @@ using namespace gten;
 
 
 ZephyrBlock::ZephyrBlock(int n_heads, int n_embd, int n_query_groups, int n_mlp, int max_ctx, ModuleDtype dtype, float rope_pct)
-    : attn_norm{LayerNorm(n_embd, max_ctx, dtype)},
-      attn{SelfAttention(n_heads, n_embd, n_query_groups, max_ctx, dtype, rope_pct, /*qkv_bias=*/true)},
-      inp_res{Residual(max_ctx, n_embd, dtype.adtype)},
-      ffn_norm{LayerNorm(n_embd, max_ctx, dtype)},
-      ffn_gate_proj{Linear(n_embd, n_mlp, max_ctx, dtype)},
-      ffn_up_proj{Linear(n_embd, n_mlp, max_ctx, dtype)},
-      ffn_silu{SiLU(max_ctx, n_mlp, dtype.adtype, /*inplace=*/true)},
-      ffn_mul{Multiply(max_ctx, n_mlp, dtype.adtype, /*inplace=*/true)},
-      ffn_down_proj{Linear(n_mlp, n_embd, max_ctx, dtype)},
-      attn_res{Residual(max_ctx, n_embd, dtype.adtype)}
+    : m_attn_norm{LayerNorm(n_embd, max_ctx, dtype)},
+      m_self_attn{SelfAttention(n_heads, n_embd, n_query_groups, max_ctx, dtype, rope_pct, /*qkv_bias=*/true)},
+      m_inp_res{Residual(max_ctx, n_embd, dtype.adtype)},
+      m_mlp_norm{LayerNorm(n_embd, max_ctx, dtype)},
+      m_mlp_gate_proj{Linear(n_embd, n_mlp, max_ctx, dtype)},
+      m_mlp_up_proj{Linear(n_embd, n_mlp, max_ctx, dtype)},
+      m_mlp_silu{SiLU(max_ctx, n_mlp, dtype.adtype, /*inplace=*/true)},
+      m_mlp_mul{Multiply(max_ctx, n_mlp, dtype.adtype, /*inplace=*/true)},
+      m_mlp_down_proj{Linear(n_mlp, n_embd, max_ctx, dtype)},
+      m_attn_res{Residual(max_ctx, n_embd, dtype.adtype)}
 {
 }
 
 Tensor ZephyrBlock::ffn_forward(const Tensor& inp, const int start_pos) {
     // self.w2(F.silu(self.w1(x)) * self.w3(x))
-    Tensor w1 = ffn_gate_proj.forward(inp, start_pos);
-    const Tensor w3 = ffn_up_proj.forward(inp, start_pos);
-    Tensor sw1 = ffn_silu.forward(w1, start_pos);
-    const Tensor w1w2 = ffn_mul.forward(sw1, w3, start_pos);
-    Tensor out = ffn_down_proj.forward(w1w2, start_pos);
+    Tensor w1 = m_mlp_gate_proj.forward(inp, start_pos);
+    const Tensor w3 = m_mlp_up_proj.forward(inp, start_pos);
+    Tensor sw1 = m_mlp_silu.forward(w1, start_pos);
+    const Tensor w1w2 = m_mlp_mul.forward(sw1, w3, start_pos);
+    Tensor out = m_mlp_down_proj.forward(w1w2, start_pos);
 
     return out;
 }
@@ -35,8 +35,8 @@ Tensor ZephyrBlock::ffn_forward(const Tensor& inp, const int start_pos) {
 
 Tensor ZephyrBlock::forward(Tensor &inp, const int start_pos)
 {
-    Tensor h = inp_res.forward(inp, attn.forward(attn_norm.forward(inp, start_pos), start_pos), start_pos);
-    Tensor out = attn_res.forward(h, ffn_forward(ffn_norm.forward(h, start_pos), start_pos), start_pos);
+    Tensor h = m_inp_res.forward(inp, m_self_attn.forward(m_attn_norm.forward(inp, start_pos), start_pos), start_pos);
+    Tensor out = m_attn_res.forward(h, ffn_forward(m_mlp_norm.forward(h, start_pos), start_pos), start_pos);
     return out;
 }
 
@@ -44,13 +44,13 @@ Tensor ZephyrBlock::forward(Tensor &inp, const int start_pos)
 Zephyr::Zephyr(const int n_ctx, ModuleDtype dtype)
     : Model(n_ctx, zephyr_cfg.max_ctx),
       m_dtype{dtype},
-      tok_emb_{Embedding(zephyr_cfg.n_vocab, zephyr_cfg.n_embd, n_ctx, dtype)},
-      norm_{LayerNorm(zephyr_cfg.n_embd, n_ctx, {kFloat16, dtype.adtype})},
-      lm_head_{EmbeddingLinear{zephyr_cfg.n_embd, zephyr_cfg.n_vocab, n_ctx, {dtype.wdtype, kFloat32}}}
+      m_tok_emb{Embedding(zephyr_cfg.n_vocab, zephyr_cfg.n_embd, n_ctx, dtype)},
+      m_norm{LayerNorm(zephyr_cfg.n_embd, n_ctx, {kFloat16, dtype.adtype})},
+      m_lm_head{EmbeddingLinear{zephyr_cfg.n_embd, zephyr_cfg.n_vocab, n_ctx, {dtype.wdtype, kFloat32}}}
 {
-    blocks_.reserve(zephyr_cfg.n_layers);
+    m_blocks.reserve(zephyr_cfg.n_layers);
     for (int i = 0; i < zephyr_cfg.n_layers; i++) {
-        blocks_.push_back(
+        m_blocks.push_back(
             ZephyrBlock(zephyr_cfg.n_heads, zephyr_cfg.n_embd, zephyr_cfg.n_query_groups, zephyr_cfg.n_ffn, n_ctx, dtype, zephyr_cfg.rope_pct)
         );
     }
@@ -58,19 +58,19 @@ Zephyr::Zephyr(const int n_ctx, ModuleDtype dtype)
 
 
 Tensor Zephyr::logits(const Tensor& tokens, const int start_pos) {
-    if (tokens.numel() > max_inference_ctx) {
-        std::cerr << "Number of prompt tokens (" << tokens.numel() << ") exceed provided maximum ctx size (" << max_inference_ctx << ")\n";
+    if (tokens.numel() > m_max_inference_ctx) {
+        std::cerr << "Number of prompt tokens (" << tokens.numel() << ") exceed provided maximum ctx size (" << m_max_inference_ctx << ")\n";
         std::exit(EXIT_FAILURE);
     }
 
-    Tensor logits = tok_emb_.forward(tokens, start_pos);
+    Tensor logits = m_tok_emb.forward(tokens, start_pos);
 
-    for (auto& block : blocks_) {
+    for (auto& block : m_blocks) {
         logits = block.forward(logits, start_pos);
     }
 
-    logits = norm_.forward(logits, start_pos);
-    logits = lm_head_.forward(logits);
+    logits = m_norm.forward(logits, start_pos);
+    logits = m_lm_head.forward(logits);
 
     return logits;
 }
@@ -78,7 +78,7 @@ Tensor Zephyr::logits(const Tensor& tokens, const int start_pos) {
 
 void Zephyr::load_from_ckpt(std::ifstream &ckpt)
 {
-    Timer load_timer{&load_time_ms};
+    Timer load_timer{&m_load_time_ms};
 
     const int64_t expected_magic = 0x454c49464e455447;
     int64_t magic;
@@ -86,67 +86,67 @@ void Zephyr::load_from_ckpt(std::ifstream &ckpt)
     GTEN_ASSERTM(magic == expected_magic, "Magic number in the binary does not match the expected one.\n");
 
     read_layer_header(ckpt);
-    read_into_weight(ckpt, tok_emb_.weight, m_dtype);
+    read_into_weight(ckpt, m_tok_emb.m_weight, m_dtype);
 
-    for (auto& block : blocks_)
+    for (auto& block : m_blocks)
     {
         // q_proj
         read_layer_header(ckpt);
-        read_into_weight(ckpt, block.attn.query.weight, m_dtype);
+        read_into_weight(ckpt, block.m_self_attn.m_query.m_weight, m_dtype);
 
         read_layer_header(ckpt);
-        read_into_weight(ckpt, block.attn.query.bias, {kFloat16, m_dtype.adtype});
+        read_into_weight(ckpt, block.m_self_attn.m_query.m_bias, {kFloat16, m_dtype.adtype});
 
         // k_proj
         read_layer_header(ckpt);
-        read_into_weight(ckpt, block.attn.key.weight, m_dtype);
+        read_into_weight(ckpt, block.m_self_attn.m_key.m_weight, m_dtype);
 
         read_layer_header(ckpt);
-        read_into_weight(ckpt, block.attn.key.bias, {kFloat16, m_dtype.adtype});
+        read_into_weight(ckpt, block.m_self_attn.m_key.m_bias, {kFloat16, m_dtype.adtype});
 
         // v_proj
         read_layer_header(ckpt);
-        read_into_weight(ckpt, block.attn.value.weight, m_dtype);
+        read_into_weight(ckpt, block.m_self_attn.m_value.m_weight, m_dtype);
 
         read_layer_header(ckpt);
-        read_into_weight(ckpt, block.attn.value.bias, {kFloat16, m_dtype.adtype});
+        read_into_weight(ckpt, block.m_self_attn.m_value.m_bias, {kFloat16, m_dtype.adtype});
 
         // o_proj
         read_layer_header(ckpt);
-        read_into_weight(ckpt, block.attn.qkv_proj.weight, m_dtype);
+        read_into_weight(ckpt, block.m_self_attn.m_qkv_proj.m_weight, m_dtype);
 
         // ffn_gate_proj
         read_layer_header(ckpt);
-        read_into_weight(ckpt, block.ffn_gate_proj.weight, m_dtype);
+        read_into_weight(ckpt, block.m_mlp_gate_proj.m_weight, m_dtype);
 
         // ffn_up_proj
         read_layer_header(ckpt);
-        read_into_weight(ckpt, block.ffn_up_proj.weight, m_dtype);
+        read_into_weight(ckpt, block.m_mlp_up_proj.m_weight, m_dtype);
 
         // ffn_down_proj
         read_layer_header(ckpt);
-        read_into_weight(ckpt, block.ffn_down_proj.weight, m_dtype);
+        read_into_weight(ckpt, block.m_mlp_down_proj.m_weight, m_dtype);
 
         // attn_norm
         read_layer_header(ckpt);
-        read_into_weight(ckpt, block.attn_norm.weight, {kFloat16, m_dtype.adtype});
+        read_into_weight(ckpt, block.m_attn_norm.m_weight, {kFloat16, m_dtype.adtype});
         read_layer_header(ckpt);
-        read_into_weight(ckpt, block.attn_norm.bias, {kFloat16, m_dtype.adtype});
+        read_into_weight(ckpt, block.m_attn_norm.m_bias, {kFloat16, m_dtype.adtype});
 
         // ffn_norm
         read_layer_header(ckpt);
-        read_into_weight(ckpt, block.ffn_norm.weight, {kFloat16, m_dtype.adtype});
+        read_into_weight(ckpt, block.m_mlp_norm.m_weight, {kFloat16, m_dtype.adtype});
         read_layer_header(ckpt);
-        read_into_weight(ckpt, block.ffn_norm.bias, {kFloat16, m_dtype.adtype});
+        read_into_weight(ckpt, block.m_mlp_norm.m_bias, {kFloat16, m_dtype.adtype});
     }
     
     read_layer_header(ckpt);
-    read_into_weight(ckpt, norm_.weight, {kFloat16, m_dtype.adtype});
+    read_into_weight(ckpt, m_norm.m_weight, {kFloat16, m_dtype.adtype});
     read_layer_header(ckpt);
-    read_into_weight(ckpt, norm_.bias, {kFloat16, m_dtype.adtype});
+    read_into_weight(ckpt, m_norm.m_bias, {kFloat16, m_dtype.adtype});
 
     read_layer_header(ckpt);
-    read_into_weight(ckpt, lm_head_.weight, m_dtype);
+    read_into_weight(ckpt, m_lm_head.m_weight, m_dtype);
 }
 
 void Zephyr::print_perf(const int n_pred_tokens)
@@ -156,23 +156,23 @@ void Zephyr::print_perf(const int n_pred_tokens)
     int non_linear_time_ms = 0;
 
     {
-        const int emb_time = tok_emb_.exec_time;
-        int norm_time = norm_.exec_time;
+        const int emb_time = m_tok_emb.m_exec_time_ms;
+        int norm_time = m_norm.m_exec_time_ms;
         int res_time = 0;
         int rope_time = 0;
         int activ_time = 0;
         int mul_time = 0;
-        linear_time_ms += lm_head_.exec_time;
+        linear_time_ms += m_lm_head.m_exec_time_ms;
 
-        for (const auto& b : blocks_) {
-            norm_time += b.attn_norm.exec_time + b.ffn_norm.exec_time;
-            attn_time_ms += b.attn.exec_time_attn;
-            res_time  += b.attn_res.exec_time + b.inp_res.exec_time;
-            rope_time += b.attn.q_rope.exec_time + b.attn.k_rope.exec_time;
-            activ_time += b.ffn_norm.exec_time;
-            mul_time  += b.ffn_mul.exec_time;
-            linear_time_ms += b.attn.query.exec_time + b.attn.key.exec_time + b.attn.value.exec_time + b.attn.qkv_proj.exec_time;
-            linear_time_ms += b.ffn_gate_proj.exec_time + b.ffn_up_proj.exec_time + b.ffn_down_proj.exec_time;
+        for (const auto& b : m_blocks) {
+            norm_time += b.m_attn_norm.m_exec_time_ms + b.m_mlp_norm.m_exec_time_ms;
+            attn_time_ms += b.m_self_attn.m_exec_time_attn_ms;
+            res_time  += b.m_attn_res.ms_exec_time_ms + b.m_inp_res.ms_exec_time_ms;
+            rope_time += b.m_self_attn.m_q_rope.m_exec_time_ms + b.m_self_attn.m_k_rope.m_exec_time_ms;
+            activ_time += b.m_mlp_norm.m_exec_time_ms;
+            mul_time  += b.m_mlp_mul.m_exec_time_ms;
+            linear_time_ms += b.m_self_attn.m_query.m_exec_time_ms + b.m_self_attn.m_key.m_exec_time_ms + b.m_self_attn.m_value.m_exec_time_ms + b.m_self_attn.m_qkv_proj.m_exec_time_ms;
+            linear_time_ms += b.m_mlp_gate_proj.m_exec_time_ms + b.m_mlp_up_proj.m_exec_time_ms + b.m_mlp_down_proj.m_exec_time_ms;
         }
 
         non_linear_time_ms = emb_time + norm_time + res_time + rope_time + activ_time + mul_time;
@@ -190,9 +190,9 @@ void Zephyr::print_perf(const int n_pred_tokens)
         .tokens_generated = n_pred_tokens,
         .throughput_tok_per_sec = 1000.0f / (float)(tot_inf_time_ms/n_pred_tokens),
         .inference_total_secs = tot_inf_time_ms / 1000,
-        .sample_time_secs = sample_time_ms / 1000,
-        .load_time_secs = load_time_ms / 1000,
-        .total_runtime_secs = (load_time_ms + sample_time_ms + tot_inf_time_ms) / 1000,
+        .sample_time_secs = m_sample_time_ms / 1000,
+        .load_time_secs = m_load_time_ms / 1000,
+        .total_runtime_secs = (m_load_time_ms + m_sample_time_ms + tot_inf_time_ms) / 1000,
         .inference_time_per_tok_ms = tot_inf_time_ms / n_pred_tokens,
         .linear_time_per_tok_ms = linear_time_ms / n_pred_tokens,
         .attn_time_per_tok_ms = attn_time_ms / n_pred_tokens,

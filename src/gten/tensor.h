@@ -1,10 +1,10 @@
 #pragma once
 
-#include <memory>
-#include <vector>
 #include <cstdio>
 #include <cstdlib>
 #include <iostream>
+#include <memory>
+#include <vector>
 
 #include "gten_types.h"
 #include "log.h"
@@ -44,19 +44,19 @@ public:
 
     // Get the pointer to internal data buffer.
     template <typename T>
-    T* data_ptr() { return reinterpret_cast<T*>(data_ptr_.get()); }
+    T* data_ptr() { return reinterpret_cast<T*>(m_data_ptr.get()); }
 
     template <typename T>
-    const T* data_ptr() const { return reinterpret_cast<const T*>(data_ptr_.get()); }
+    const T* data_ptr() const { return reinterpret_cast<const T*>(m_data_ptr.get()); }
 
-    const void* data_ptr() const { return data_ptr_.get(); }
-    void* data_ptr() { return data_ptr_.get(); }
+    const void* data_ptr() const { return m_data_ptr.get(); }
+    void* data_ptr() { return m_data_ptr.get(); }
 
-    Dtype dtype() const { return dtype_; }
+    Dtype dtype() const { return M_dtype; }
 
     // Get the number of bytes that an element in the tensor occupies.
     int itemsize() const {
-        switch (dtype_) {
+        switch (M_dtype) {
             case kQint8:
                 return 1;
             case kInt32:
@@ -71,64 +71,65 @@ public:
         }
     }
 
-    bool is_quantized() const  { return dtype_ == kQint8; }
-    bool is_1d() const { return shape_.size() == 1; }
-    bool is_2d() const { return shape_.size() == 2; }
-    bool is_3d() const { return shape_.size() == 3; }
-    int ndims() const { return shape_.size(); }
+    bool is_quantized() const  { return M_dtype == kQint8; }
+    bool is_1d() const { return m_shape.size() == 1; }
+    bool is_2d() const { return m_shape.size() == 2; }
+    bool is_3d() const { return m_shape.size() == 3; }
+    int ndims() const { return m_shape.size(); }
 
     // Get the number of elems in the tensor.
-    int numel() const { return numel_; }
+    int numel() const { return m_numel; }
 
     /// Returns the size of the give dimension.
     int dimsize(int i) const {
-        GTEN_ASSERT(i < int(shape_.size()));
-        return shape_[i];
+        GTEN_ASSERT(i < int(m_shape.size()));
+        return m_shape[i];
     }
 
     /// Returns the size of the give dimension.
     int stride(int i) const {
-        GTEN_ASSERT(i < int(strides_.size()));
-        return strides_[i];
+        GTEN_ASSERT(i < int(m_strides.size()));
+        return m_strides[i];
     }
 
     /// Returns the size of the give dimension in bytes.
     int bstride(int i) const {
-        GTEN_ASSERT(i < int(strides_.size()));
+        GTEN_ASSERT(i < int(m_strides.size()));
 
-        switch (dtype_)
+        switch (M_dtype)
         {
             case kQint4: {
-                if (strides_[i] == 1) {
+                if (m_strides[i] == 1) {
                     return 1;
                 }
-                return (strides_[i]/globs::q4_block_size) * sizeof(Q4Block);
+                return (m_strides[i]/globs::q4_block_size) * sizeof(Q4Block);
             }
             case kQint8: {
-                if (strides_[i] == 1) {
+                if (m_strides[i] == 1) {
                     return 1;
                 }
-                return (strides_[i]/globs::q8_block_size) * sizeof(Q8Block);
+                return (m_strides[i]/globs::q8_block_size) * sizeof(Q8Block);
             }
             default:
-                return strides_[i] * itemsize();
+                return m_strides[i] * itemsize();
         }
     }
 
-    size_t nbytes() const { return storage_size_; }
+    size_t nbytes() const { return m_storage_size; }
 
-    const std::vector<int>& shape() const { return shape_; }
+    const std::vector<int>& shape() const { return m_shape; }
 
-    bool shape_eq(const std::vector<int>& shape) const { return shape == shape_; }
+    bool shape_eq(const std::vector<int>& shape) const { return shape == m_shape; }
 
 private:
-    Dtype dtype_ = kInt32;
-    std::shared_ptr<uint8_t> data_ptr_;
-    int storage_size_ = 0;  // in_bytes
-    int numel_ = 0;
-    std::vector<int> shape_;
-    std::vector<int> strides_;
+    Dtype M_dtype = kInt32;
+    std::shared_ptr<uint8_t> m_data_ptr;
+    int m_storage_size = 0;  // in_bytes
+    int m_numel = 0;
+    std::vector<int> m_shape;
+    std::vector<int> m_strides;
 
+private:
     void validate_shape(const std::vector<int>& shape) const;
     void set_strides_from_shape(const std::vector<int>& shape);
     int numel_from_shape(const std::vector<int>& shape) const;

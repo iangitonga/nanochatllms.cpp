@@ -66,7 +66,7 @@ LLamaTokenizer::LLamaTokenizer(
 }
 
 LLamaTokenizer::~LLamaTokenizer() {
-    for (int i = 0; i < vocab_size; i++) {
+    for (int i = 0; i < m_vocab_size; i++) {
         free(vocab_[i]);
     }
     free(vocab_);
@@ -76,7 +76,7 @@ LLamaTokenizer::~LLamaTokenizer() {
 
 
 const char* LLamaTokenizer::decode(int prev_token, int token) {
-    if (token >= vocab_size) {
+    if (token >= m_vocab_size) {
         return "";
     }
     char *piece = vocab_[token];
@@ -101,7 +101,7 @@ static int str_lookup(const char *str, TokenIndex *sorted_vocab, int vocab_size)
 
 std::vector<int> LLamaTokenizer::encode(std::string& prompt)
 {
-    prompt = prompt_prefix + prompt + prompt_suffix;
+    prompt = m_prompt_prefix + prompt + m_prompt_suffix;
 
     const int num_prompt_tokens = prompt.size() + 1; // +1 for '\0'
 
@@ -114,17 +114,17 @@ std::vector<int> LLamaTokenizer::encode(std::string& prompt)
     std::vector<int> out_tokens;
     out_tokens.reserve(num_prompt_tokens);
 
-    for (int i = 0; i < int(prompt_prefix_tokens.size()); i++) {
-        out_tokens.push_back(prompt_prefix_tokens[i]);
+    for (int i = 0; i < int(m_tokens_prefix.size()); i++) {
+        out_tokens.push_back(m_tokens_prefix[i]);
     }
 
     for (int token : prompt_tokens) {
         out_tokens.push_back(token);
     }
 
-    for (int i = 0; i < int(prompt_suffix_tokens.size()); i++)
+    for (int i = 0; i < int(m_tokens_suffix.size()); i++)
     {
-        out_tokens.push_back(prompt_suffix_tokens[i]);
+        out_tokens.push_back(m_tokens_suffix[i]);
     }
     
     return out_tokens;
@@ -138,12 +138,12 @@ void LLamaTokenizer::encode_internal(const std::string& prompt, std::vector<int>
 
     if (sorted_vocab_ == NULL) {
         // lazily malloc and sort the vocabulary
-        sorted_vocab_ = (TokenIndex*)malloc(vocab_size * sizeof(TokenIndex));
-        for (int i = 0; i < vocab_size; i++) {
+        sorted_vocab_ = (TokenIndex*)malloc(m_vocab_size * sizeof(TokenIndex));
+        for (int i = 0; i < m_vocab_size; i++) {
             sorted_vocab_[i].str = vocab_[i];
             sorted_vocab_[i].id = i;
         }
-        qsort(sorted_vocab_, vocab_size, sizeof(TokenIndex), compare_tokens);
+        qsort(sorted_vocab_, m_vocab_size, sizeof(TokenIndex), compare_tokens);
     }
 
     // create a temporary buffer that will store merge candidates of always two consecutive tokens
@@ -156,7 +156,7 @@ void LLamaTokenizer::encode_internal(const std::string& prompt, std::vector<int>
     // TODO: pretty sure this isn't correct in the general case but I don't have the
     // energy to read more of the sentencepiece code to figure out what it's doing
     if (text[0] != '\0') {
-        int dummy_prefix = str_lookup(" ", sorted_vocab_, vocab_size);
+        int dummy_prefix = str_lookup(" ", sorted_vocab_, m_vocab_size);
         out_tokens.push_back(dummy_prefix);
     }
 
@@ -193,7 +193,7 @@ void LLamaTokenizer::encode_internal(const std::string& prompt, std::vector<int>
         }
 
         // ok c+1 is not a continuation byte, so we've read in a full codepoint
-        int id = str_lookup(str_buffer, sorted_vocab_, vocab_size);
+        int id = str_lookup(str_buffer, sorted_vocab_, m_vocab_size);
 
         if (id != -1) {
             // we found this codepoint in vocab, add it as a token
@@ -218,7 +218,7 @@ void LLamaTokenizer::encode_internal(const std::string& prompt, std::vector<int>
         for (int i=0; i < int(out_tokens.size()-1); i++) {
             // check if we can merge the pair (tokens[i], tokens[i+1])
             sprintf(str_buffer, "%s%s", vocab_[out_tokens[i]], vocab_[out_tokens[i+1]]);
-            int id = str_lookup(str_buffer, sorted_vocab_, vocab_size);
+            int id = str_lookup(str_buffer, sorted_vocab_, m_vocab_size);
             if (id != -1 && vocab_scores_[id] > best_score) {
                 // this merge pair exists in vocab! record its score and position
                 best_score = vocab_scores_[id];

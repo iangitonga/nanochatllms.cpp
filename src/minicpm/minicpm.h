@@ -33,22 +33,22 @@ public:
     Tensor mlp_forward(const Tensor& inp, const int start_pos=0);
 
 public:
-    RMSNorm input_norm;
-    SelfAttention self_attn;
-    Residual inp_residual;
-    RMSNorm post_attn_norm;
-    Linear ffn_gate_proj;
-    Linear ffn_up_proj;
-    SiLU ffn_silu;
-    Multiply ffn_mul;
-    Linear ffn_down_proj;
-    Residual attn_res;
+    RMSNorm m_input_norm;
+    SelfAttention m_self_attn;
+    Residual m_inp_residual;
+    RMSNorm m_post_attn_norm;
+    Linear m_mlp_gate_proj;
+    Linear m_mlp_up_proj;
+    SiLU m_mlp_silu;
+    Multiply m_mlp_mul;
+    Linear m_mlp_down_proj;
+    Residual m_attn_res;
 };
 
 
 class MiniCPM : public Model {
 public:
-    ModuleDtype dtype_;
+    ModuleDtype m_dtype;
 
 public:
     MiniCPM(const int n_ctx, ModuleDtype dtype);

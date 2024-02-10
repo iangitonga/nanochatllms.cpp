@@ -41,9 +41,9 @@ public:
     ~Timer();
     void stop();
 private:
-    int* time_tracker_;
-    std::chrono::time_point<std::chrono::high_resolution_clock> start_time_;
-    bool stopped_ = false;
+    int* m_time_tracker;
+    std::chrono::time_point<std::chrono::high_resolution_clock> m_start_time;
+    bool m_timer_stopped = false;
 };
 
 }
