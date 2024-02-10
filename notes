@@ -1,25 +1,7 @@
-
-model.embed_tokens.weight
-model.norm.weight
-model.layers.0.input_layernorm.weight
-model.layers.0.self_attn.q_proj.weight
-model.layers.0.self_attn.k_proj.weight
-model.layers.0.self_attn.v_proj.weight
-model.layers.0.self_attn.o_proj.weight
-model.layers.0.post_attention_layernorm.weight
-model.layers.0.mlp.gate_proj.weight
-model.layers.0.mlp.up_proj.weight
-model.layers.0.mlp.down_proj.weight
-
-scale emb_tok output [1040]  #
-scale lm_head output [1214]  #
-residual scale_depth. [818]  #
-rms_norm [122]
-
+TODO:
 
 Test all models.
-
-
+check n_predict
 Rename class vars. prefix m_ for public c_ for consts, s_ for statics.
 Normalize params
 Refactor ops. OPEENMP, AVX FLAGS

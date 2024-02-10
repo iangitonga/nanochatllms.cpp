@@ -12,9 +12,9 @@ MODELS_URLS = {
         "q4": "https://huggingface.co/iangitonga/gten/resolve/main/tinyllama.q4.gten",
     },
     "zephyr": {
-        "fp16": "https://huggingface.co/iangitonga/gten/resolve/main/zephyr1_6b.fp16.gten",
-        "q8": "https://huggingface.co/iangitonga/gten/resolve/main/zephyr1_6b.q8.gten",
-        "q4": "https://huggingface.co/iangitonga/gten/resolve/main/zephyr1_6b.q4.gten",
+        "fp16": "https://huggingface.co/iangitonga/gten/resolve/main/zephyr.fp16.gten",
+        "q8": "https://huggingface.co/iangitonga/gten/resolve/main/zephyr.q8.gten",
+        "q4": "https://huggingface.co/iangitonga/gten/resolve/main/zephyr.q4.gten",
     },
     "minicpm": {
         "fp16": "https://huggingface.co/iangitonga/gten/resolve/main/minicpm.fp16.gten",
