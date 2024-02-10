@@ -17,10 +17,14 @@ residual scale_depth. [818]  #
 rms_norm [122]
 
 
-Github actions.
+Test all models.
+
+
 Rename class vars. prefix m_ for public c_ for consts, s_ for statics.
 Normalize params
 Refactor ops. OPEENMP, AVX FLAGS
 Module Blocks.
+Github actions.
+optimize.
 Docs?
 

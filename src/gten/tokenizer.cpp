@@ -102,19 +102,12 @@ static int str_lookup(const char *str, TokenIndex *sorted_vocab, int vocab_size)
 std::vector<int> LLamaTokenizer::encode(std::string& prompt)
 {
     prompt = prompt_prefix + prompt + prompt_suffix;
-    // prompt format: <|im_start|>user\nPROMPT<|im_end|>\n<|im_start|>assistant\n
-
-    // [<bos>, <|im_start|>]
-    // static const int pre_prompt_tokens[] = {1, 32001};
-    // [<|im_end|>, \, n, <|im_start|>, assistant\, n]
-    // static const int post_prompt_tokens[] = {32002, 29871, 13, 32001, 20255, 13};
 
     const int num_prompt_tokens = prompt.size() + 1; // +1 for '\0'
 
     std::vector<int> prompt_tokens;
     prompt_tokens.reserve(num_prompt_tokens);
 
-    // prompt.insert(0, "user\n");
     encode_internal(prompt, prompt_tokens);
 
     /// TODO: Use a single vector.
