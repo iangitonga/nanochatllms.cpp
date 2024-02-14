@@ -399,12 +399,12 @@ static float vec_dot_product_q8_q4(const Q8Block* inp0, const Q4Block* inp1, con
         const __m128i b03 = _mm_cvtepu8_epi16(b01);
 
         const __m128i add_vec = _mm_set1_epi16(-7);
-        const __m128i b04 = _mm_add_epi16(_mm_srli_epi16(b02, 4), add_vec);
-        const __m128i b05 = _mm_add_epi16(_mm_srli_epi16(b03, 4), add_vec);
+        const __m128i b04 = _mm_add_epi16(_mm_srli_epi16(b02, 4), add_vec); // b00_high
+        const __m128i b05 = _mm_add_epi16(_mm_srli_epi16(b03, 4), add_vec); // b01_high
 
         const __m128i and_vec = _mm_set1_epi16(0b0000000000001111);
-        const __m128i b06 = _mm_add_epi16(_mm_and_si128(b02, and_vec), add_vec);
-        const __m128i b07 = _mm_add_epi16(_mm_and_si128(b03, and_vec), add_vec);
+        const __m128i b06 = _mm_add_epi16(_mm_and_si128(b02, and_vec), add_vec); // b00_low
+        const __m128i b07 = _mm_add_epi16(_mm_and_si128(b03, and_vec), add_vec); // b01_low
 
         // Multiply the 8 16-bit ints to obtain 8 32-bit ints and add adjacent
         // values to obtain 4 32-bit ints.
@@ -572,7 +572,9 @@ static void matmul_2d_impl(const Tensor& inp, const Tensor& w, Tensor& out, cons
     for (int r0 = start_pos; r0 < n_ctx; r0++) {
         const char* inp_row_data = inp_data + r0*inp_st0;
 
+#if defined(_OPENMP)
         #pragma omp parallel for
+#endif
         for (int c0 = 0; c0 < d_out; c0++)
         {
             const char* w_row_data = w_data + c0*w_st0;

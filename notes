@@ -1,12 +1,19 @@
 TODO:
 
-detect __mf16c__ in cmake
-Refactor ops. OPEENMP, AVX FLAGS
-optimize ops.
+OPS:
+	- Refactor/rearrange ops.cpp to look like ops.h
+	- Add Q8 simd dequantisation and quantisation.
+	- Add simd fp conversions.
+	- Adopt loop and vars naming convention.
+	- Add Tables / add optimised ops ??? 
 
-Github actions.
+Project:
+	Github actions.
 
-Tests?
-Docs?
-Normalize params??
+Future:
+	Tests?
+	Docs?
+	Normalize params??
+
+detect __mf16c__ in cmake[msvc]?
 

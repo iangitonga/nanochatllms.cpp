@@ -71,7 +71,7 @@ endmacro(CHECK_FOR_AVX)
 
 
 # Check for the presence of mf16c and figure out the flags to use for it.
-# mf16c allows loading and writing fp16 values and converting them.
+# mf16c allows loading and writing fp16 values and converting them in-hardware.
 # TODO: Does AVX detection imply f16? in that case no need to check for it here!
 macro(CHECK_FOR_F16C)
     include(CheckCXXSourceRuns)
