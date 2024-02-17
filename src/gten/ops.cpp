@@ -55,22 +55,22 @@ static void read_row_to_float(const char* inp, Dtype inp_dtype, float* out_buf, 
         case kFloat16:
         {
             const Float16* inp_data = reinterpret_cast<const Float16*>(inp);
-// #if defined(__AVX__) && defined(__F16C__)
-//             const int simd_n_blocks = rowsize / 8;
+#if defined(__AVX__) && defined(__F16C__)
+            const int simd_n_blocks = rowsize / 8;
 
-//             for (int i = 0; i < simd_n_blocks; ++i) {
-//                 const __m256 fp32 = _mm256_cvtph_ps(_mm_loadu_si128((__m128i_u *)inp_data + i*8));
-//                 _mm256_storeu_ps(out_buf + i*8, fp32);
-//             }
+            for (int i = 0; i < simd_n_blocks; ++i) {
+                const __m256 fp32 = _mm256_cvtph_ps(_mm_loadu_si128((__m128i_u *)(inp_data + i*8)));
+                _mm256_storeu_ps(out_buf + i*8, fp32);
+            }
 
-//             for (int i = simd_n_blocks*8; i < rowsize; ++i) {
-//                 out_buf[i] = fp16_to_fp32(inp_data[i]);
-//             }
-// #else
+            for (int i = simd_n_blocks*8; i < rowsize; ++i) {
+                out_buf[i] = fp16_to_fp32(inp_data[i]);
+            }
+#else
             for (int i = 0; i < rowsize; i++) {
                 out_buf[i] = fp16_to_fp32(inp_data[i]);
             }
-// #endif
+#endif
         } break;
         case kFloat32:
         {
@@ -94,22 +94,22 @@ static void write_row_from_float(float* inp, char* out, Dtype out_dtype, int row
         case kFloat16:
         {
             Float16* out_data = reinterpret_cast<Float16*>(out);
-// #if defined(__AVX__) && defined(__F16C__)
-//             const int simd_n_blocks = rowsize / 8;
+#if defined(__AVX__) && defined(__F16C__)
+            const int simd_n_blocks = rowsize / 8;
 
-//             for (int i = 0; i < simd_n_blocks; ++i) {
-//                 const __m256 fp32 = _mm256_loadu_ps(inp + i*8);
-//                 _mm_storeu_si128((__m128i_u *)(out_data + i*8), _mm256_cvtps_ph(fp32, 0));
-//             }
+            for (int i = 0; i < simd_n_blocks; ++i) {
+                const __m256 fp32 = _mm256_loadu_ps(inp + i*8);
+                _mm_storeu_si128((__m128i_u *)(out_data + i*8), _mm256_cvtps_ph(fp32, 0));
+            }
 
-//             for (int i = simd_n_blocks*8; i < rowsize; ++i) {
-//                 out_data[i] = fp32_to_fp16(inp[i]);
-//             }
-// #else
+            for (int i = simd_n_blocks*8; i < rowsize; ++i) {
+                out_data[i] = fp32_to_fp16(inp[i]);
+            }
+#else
             for (int i = 0; i < rowsize; i++) {
                 out_data[i] = fp32_to_fp16(inp[i]);
             }
-// #endif
+#endif
         } break;
         case kFloat32:
         {
