@@ -31,10 +31,35 @@ static void q8_quantize_block(const float* inp, Q8Block* out, const int block_si
 
 
 static void q8_dequantize_block(const Q8Block* inp, float* out, const int block_size) {
+#if defined(__AVX__)
+    const int simd_n_blocks = (block_size / 8);
+
+    const float delta = fp16_to_fp32(inp->delta);
+    for (int i = 0; i < simd_n_blocks; ++i) {
+        // Load 64-bit(8 1-byte quants) in the lower half. [8-quants, -------].
+        const __m128i a00 = _mm_loadu_si64(inp->data + i*8);
+
+        // how many 32-bit flts in avx register: 8, sse: 4
+        const __m128 a01 = _mm_cvtepi32_ps(_mm_cvtepi8_epi32(a00));
+        const __m128 a02 = _mm_cvtepi32_ps(_mm_cvtepi8_epi32(_mm_bsrli_si128(a00, 4)));
+
+        const __m128 delta_vec = _mm_set1_ps(delta);
+        const __m128 a03 = _mm_mul_ps(a01, delta_vec);
+        const __m128 a04 = _mm_mul_ps(a02, delta_vec);
+
+        _mm_storeu_ps(out + i*8, a03);
+        _mm_storeu_ps(out + i*8 + 4, a04);
+    }
+
+    for (int i = simd_n_blocks*8; i < block_size; ++i) {
+       out[i] = inp->data[i] * delta;
+    }
+#else
     const float delta = fp16_to_fp32(inp->delta);
     for (int i = 0; i < block_size; i++) {
         out[i] = inp->data[i] * delta;
     }
+#endif
 }
 
 [[nodiscard]]

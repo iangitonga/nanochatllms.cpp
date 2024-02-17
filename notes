@@ -1,9 +1,7 @@
 TODO:
 
 OPS:
-	- Refactor/rearrange ops.cpp to look like ops.h
-	- Add Q8 simd dequantisation and quantisation.
-	- Add simd fp conversions.
+	- Add Q8 simd dequantisation.
 	- Adopt loop and vars naming convention.
 	- Add Tables / add optimised ops ??? 
 
