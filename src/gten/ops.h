@@ -23,7 +23,7 @@ void qkv_attn(const Tensor& q, const Tensor& k, const Tensor& v, Tensor& qk, Ten
 
 void rms_norm(const Tensor& inp, const Tensor& weight, Tensor& out, const int start_pos=0);
 
-void rotary_emb(Tensor& inp, const int d_head, const float rope_pct, const int start_pos=0);
+void rotary_emb(Tensor& inp, Tensor& out, const int d_head, const float rope_pct, const int start_pos=0);
 
 void scale(Tensor& inp, float scaler, const int start_pos=0);
 

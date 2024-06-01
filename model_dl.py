@@ -20,6 +20,18 @@ MODELS_URLS = {
         "fp16": "https://huggingface.co/iangitonga/gten/resolve/main/minicpm.fp16.gten",
         "q8": "https://huggingface.co/iangitonga/gten/resolve/main/minicpm.q8.gten",
         "q4": "https://huggingface.co/iangitonga/gten/resolve/main/minicpm.q4.gten",
+    },
+    "openelm_sm": {
+        "fp16": "https://huggingface.co/iangitonga/gten/resolve/main/openelm-sm.fp16.gten"
+    },
+    "openelm_md": {
+        "fp16": "https://huggingface.co/iangitonga/gten/resolve/main/openelm-md.fp16.gten"
+    },
+    "openelm_lg": {
+        "fp16": "https://huggingface.co/iangitonga/gten/resolve/main/openelm-lg.fp16.gten"
+    },
+    "openelm_xl": {
+        "fp16": ""
     }
 }
 
@@ -49,7 +61,6 @@ def download_model(model_name, dtype):
     if os.path.exists(model_path):
         return
     os.makedirs("models", exist_ok=True)
-    model_url_key = f"{model_name}.{dtype}"
     _download_model(MODELS_URLS[model_name][dtype], model_path)
 
 # python model.py model inf

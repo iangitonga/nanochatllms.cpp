@@ -8,8 +8,9 @@ implemented in fp16, 8-bit and 4-bit formats. This project was inspired by
 
 ## Implemented models
 1. MiniCPM-2B DPO [source](https://huggingface.co/openbmp/MiniCPM-2B-dpo-fp16) [License](https://github.com/OpenBMB/General-Model-License/blob/main/%E9%80%9A%E7%94%A8%E6%A8%A1%E5%9E%8B%E8%AE%B8%E5%8F%AF%E5%8D%8F%E8%AE%AE-%E6%9D%A5%E6%BA%90%E8%AF%B4%E6%98%8E-%E5%AE%A3%E4%BC%A0%E9%99%90%E5%88%B6-%E5%95%86%E4%B8%9A%E6%8E%88%E6%9D%83.md)
-1. StableLM-2-Zephyr-1.6B [source](https://huggingface.co/stabilityai/stablelm-2-zephyr-1_6b)
-2. TinyLlama-1.1B-Chat-v0.4 [source](https://github.com/jzhang38/TinyLlama)
+2. StableLM-2-Zephyr-1.6B [source](https://huggingface.co/stabilityai/stablelm-2-zephyr-1_6b)
+3. TinyLlama-1.1B-Chat-v0.4 [source](https://github.com/jzhang38/TinyLlama)
+4. OpenELM [source](https://huggingface.co/apple/OpenELM-1_1B)
 
 
 ## Build and run

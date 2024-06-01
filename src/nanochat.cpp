@@ -2,6 +2,7 @@
 #include "tinyllama/tinyllama.h"
 #include "zephyr/zephyr.h"
 #include "minicpm/minicpm.h"
+#include "openelm/openelm.h"
 
 
 using namespace gten;
@@ -13,7 +14,7 @@ USAGE:
 ./nanochat [options] -m MODEL_NAME -p PROMPT  for a single prompt or
 ./nanochat [options] -m MODEL_NAME for a chat interface. 
 
-Available MODEL_NAME options are [tinyllama, zephyr, minicpm].
+Available MODEL_NAME options are [tinyllama, zephyr, minicpm, openelm_sm, openelm_md, openelm_lg].
 
 Optional args. 
 -f16 :     Use float-16 model and inference. [default]
@@ -61,7 +62,8 @@ int main(int argc, char const *argv[])
         else if (arg == "-m") {
             if (i + 1 < argc) {
                 model_name = argv[i + 1];
-                if (model_name == "tinyllama" || model_name == "zephyr" || model_name == "minicpm") {
+                if (model_name == "tinyllama" || model_name == "zephyr" || model_name == "minicpm"
+                    || model_name == "openelm_sm" || model_name == "openelm_md" || model_name == "openelm_lg") {
                     i += 1; // fast-forward
                 } else {
                     std::cerr << "error: Unknown model name: " << model_name << ".\n" << usage_message << "\n";
@@ -207,6 +209,23 @@ int main(int argc, char const *argv[])
         const std::string prompt_prefix = "<用户>";
         const std::string prompt_suffix = "<AI>";
         tokenizer = new LLamaTokenizer{tok_path, minicpm_cfg.n_vocab, minicpm_cfg.eos, prompt_prefix, prompt_suffix, {}, {}};
+    }
+    else if (model_name.find("openelm") != std::string::npos)
+    {
+        OpenELMConfig model_config;
+
+        if (model_name == "openelm_sm") { model_config = openelm_sm_cfg; }
+        else if (model_name == "openelm_md") { model_config = openelm_md_cfg; }
+        else if (model_name == "openelm_lg") { model_config = openelm_lg_cfg; }
+        else { GTEN_ASSERT(false); }
+        
+        model_ptr = new OpenELM{n_predict, dtype, model_config};
+
+        const char* tok_path = "./assets/tokenizers/tinyllama_tokenizer.bin";
+        const int vocab_size = tinyllama_cfg.n_vocab - 3;
+        const std::vector<int> prefix_tokens = {1};
+        const std::vector<int> suffix_tokens = {};
+        tokenizer = new LLamaTokenizer{tok_path, vocab_size, tinyllama_cfg.eos, "", "", prefix_tokens, suffix_tokens};
     }
     else
     {

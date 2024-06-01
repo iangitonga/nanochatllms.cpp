@@ -140,6 +140,28 @@ Tensor RMSNorm::forward(const Tensor& inp, const int start_pos)
     return m_acv;
 }
 
+
+RMSNorm3D::RMSNorm3D(int d_in, int d_norm, int max_ctx, ModuleDtype dtype)
+    : m_weight{Tensor({d_norm}, kFloat16)}, m_acv{Tensor({max_ctx, d_in}, dtype.adtype)}
+{
+}
+
+Tensor RMSNorm3D::forward(const Tensor& inp, const int start_pos)
+{
+    Timer timer{&m_exec_time_ms};
+
+    GTEN_ASSERT(inp.is_3d());
+
+    const int n_ctx = inp.dimsize(0);
+    const int n_embd = inp.dimsize(1) * inp.dimsize(2);
+
+    m_acv.resize({n_ctx, n_embd});
+
+    ops::rms_norm(inp, m_weight, m_acv, start_pos);
+
+    return m_acv;
+}
+
 LayerNorm::LayerNorm(int d_in, int max_ctx, ModuleDtype dtype)
     : m_weight{Tensor({d_in}, kFloat16)},
       m_bias{Tensor({d_in}, kFloat16)},
@@ -217,13 +239,13 @@ Tensor SiLU::forward(Tensor &inp, const int start_pos)
     }
 }
 
-RotaryEmbedding::RotaryEmbedding(const int d_head, const bool inplace, const float rope_pct)
-    : m_d_head{d_head}, m_rope_pct{rope_pct}
+RotaryEmbedding::RotaryEmbedding(const int n_embed, const int d_head, const int max_ctx, const bool inplace, const float rope_pct)
+    : m_d_head{d_head}, m_rope_pct{rope_pct}, m_inplace{inplace}
 {
     GTEN_ASSERT(rope_pct <= 1.0f && rope_pct >= 0.0f);
 
     if (!inplace) {
-        GTEN_ASSERTM(false, "RotaryEmbedding inplace not implemented.");
+        m_acv = Tensor({max_ctx, n_embed}, kFloat16);
     }
 }
 
@@ -231,9 +253,17 @@ Tensor RotaryEmbedding::forward(Tensor& inp, const int start_pos)
 {
     Timer timer{&m_exec_time_ms};
 
-    ops::rotary_emb(inp, m_d_head, m_rope_pct, start_pos);
+    if (m_inplace) {
+        ops::rotary_emb(inp, inp, m_d_head, m_rope_pct, start_pos);
 
-    return inp;
+        return inp;
+    } else {
+        m_acv.resize({inp.dimsize(0), inp.dimsize(1)});
+
+        ops::rotary_emb(inp, m_acv, m_d_head, m_rope_pct, start_pos);
+
+        return m_acv;
+    }
 }
 
 
@@ -242,8 +272,8 @@ SelfAttention::SelfAttention(int n_heads, int n_embd, int n_query_groups, int ma
       m_qkv_proj{Linear(n_embd, n_embd, max_ctx, dtype)},
       m_qk_acv{Tensor({n_heads, max_ctx, max_ctx}, dtype.adtype)},
       m_qkv_acv{Tensor({max_ctx, n_embd}, dtype.adtype)},
-      m_q_rope{RotaryEmbedding{n_embd/n_heads, /*inplace=*/true, rope_pct}},
-      m_k_rope{RotaryEmbedding{n_embd/n_heads, /*inplace=*/true, rope_pct}},
+      m_q_rope{RotaryEmbedding{n_embd, n_embd/n_heads, max_ctx, /*inplace=*/true, rope_pct}},
+      m_k_rope{RotaryEmbedding{n_embd, n_embd/n_heads, max_ctx, /*inplace=*/true, rope_pct}},
       m_n_heads{n_heads}, m_max_ctx{max_ctx}
 {
     const int d_head = n_embd / n_heads;

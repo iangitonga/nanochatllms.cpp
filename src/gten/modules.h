@@ -57,6 +57,17 @@ public:
     Tensor forward(const Tensor& inp, const int start_pos = 0);
 };
 
+class RMSNorm3D {
+public:
+    Tensor m_weight;
+    Tensor m_acv;
+    int m_exec_time_ms{0};
+
+public:
+    RMSNorm3D(int d_in, int d_norm, int max_ctx, ModuleDtype dtype);
+    Tensor forward(const Tensor& inp, const int start_pos = 0);
+};
+
 
 class LayerNorm {
 public:
@@ -151,12 +162,14 @@ public:
 
 public:
     // `rope_pct` is the percentage (in range [0.0, 1.0]) of the head_dim we should apply rope. 
-    RotaryEmbedding(const int d_head, const bool inplace=true, const float rope_pct=1.0f);
+    RotaryEmbedding(const int n_embed, const int d_head, const int max_ctx, const bool inplace=true, const float rope_pct=1.0f);
     Tensor forward(Tensor& inp, const int start_pos=0);
 
 private:
     int m_d_head;
     float m_rope_pct;
+    bool m_inplace;
+    Tensor m_acv;
 };
 
 

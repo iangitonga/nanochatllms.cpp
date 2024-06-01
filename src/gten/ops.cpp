@@ -772,17 +772,19 @@ void silu_inplace(Tensor& inp, const int start_pos)
 }
 
 
-static void rotary_emb_impl(Tensor& inp, const int d_head, const float rope_pct, const int start_pos)
+static void rotary_emb_impl(Tensor& inp, Tensor& out, const int d_head, const float rope_pct, const int start_pos)
 {
     char* inp_data = inp.data_ptr<char>();
     const Dtype inp_dtype = inp.dtype();
+
+    char* out_data = out.data_ptr<char>();
 
     const int n_ctx = inp.dimsize(0);
     const int n_embd = inp.dimsize(1);
     const int n_head = n_embd / d_head;
     const int inp_st0 = inp.bstride(0);
 
-    Tensor inpx = inp.view({n_ctx, n_head, d_head});
+    // Tensor inpx = inp.view({n_ctx, n_head, d_head});
 
     float* inp_buf = g_ops_state.buf(n_embd);
 
@@ -791,6 +793,7 @@ static void rotary_emb_impl(Tensor& inp, const int d_head, const float rope_pct,
     const float d = static_cast<float>(rope_d_head);
     for (int i = start_pos; i < n_ctx; ++i) {
         char* inp_row_data = inp_data + i * inp_st0;
+        char* out_row_data = out_data + i * inp_st0;
         read_row_to_float(inp_row_data, inp_dtype, inp_buf, n_embd);
 
        for (int h = 0; h < n_head; ++h) {
@@ -813,14 +816,14 @@ static void rotary_emb_impl(Tensor& inp, const int d_head, const float rope_pct,
             }
         }
 
-        write_row_from_float(inp_buf, inp_row_data, inp_dtype, n_embd);
+        write_row_from_float(inp_buf, out_row_data, inp_dtype, n_embd);
     }
 }
 
 
-void rotary_emb(Tensor& inp, const int d_head, const float rope_pct, const int start_pos)
+void rotary_emb(Tensor& inp, Tensor& out, const int d_head, const float rope_pct, const int start_pos)
 {
-    rotary_emb_impl(inp, d_head, rope_pct, start_pos);
+    rotary_emb_impl(inp, out, d_head, rope_pct, start_pos);
 }
 
 
@@ -850,32 +853,63 @@ static void rms_norm_impl(const Tensor& inp, const Tensor& weight, Tensor& out, 
     char* out_data = out.data_ptr<char>();
     const Dtype out_dtype = out.dtype();
 
-    const int n_ctx = inp.dimsize(0);
-    const int n_embd = inp.dimsize(1);
-    const int inp_st0 = inp.bstride(0);
-    const int out_st0 = out.bstride(0);
+    if (inp.is_3d())
+    {
+        const int n_ctx = inp.dimsize(0);
+        const int n_heads = inp.dimsize(1);
+        const int d_head = inp.dimsize(2);
 
-    const Float16* weight_data = weight.data_ptr<Float16>();
-    float* inp_buf = g_ops_state.buf(n_embd * 2);
-    float* out_buf = inp_buf + n_embd;
+        Tensor out1 = out.view({n_ctx, n_heads, d_head});
 
-    for (int i = start_pos; i < n_ctx; i++) {
-        const char* inp_row_data = inp_data + i * inp_st0;
-        read_row_to_float(inp_row_data, inp_dtype, inp_buf, n_embd);
+        const Float16* weight_data = weight.data_ptr<Float16>();
 
-        rms_norm_vec_f32(inp_buf, weight_data, out_buf, n_embd);
+        const int inp_st0 = inp.bstride(0);
+        const int inp_st1 = inp.bstride(1);
 
-        write_row_from_float(out_buf, out_data + i * out_st0, out_dtype, n_embd);
+        float* inp_buf = g_ops_state.buf(d_head * 2);
+        float* out_buf = inp_buf + d_head;
+
+        for (int i = start_pos; i < n_ctx; i++) {
+            for (int h = 0; h < n_heads; h++) {
+                const char* inp_row_data = inp_data + i * inp_st0 + h * inp_st1;
+                read_row_to_float(inp_row_data, inp_dtype, inp_buf, d_head);
+
+                rms_norm_vec_f32(inp_buf, weight_data, out_buf, d_head);
+
+                write_row_from_float(out_buf, out_data + i * inp_st0 + h * inp_st1, out_dtype, d_head);
+            }
+        }
+    } 
+    else
+    {
+        const int n_ctx = inp.dimsize(0);
+        const int n_embd = inp.dimsize(1);
+        const int inp_st0 = inp.bstride(0);
+        const int out_st0 = out.bstride(0);
+
+        const Float16* weight_data = weight.data_ptr<Float16>();
+        float* inp_buf = g_ops_state.buf(n_embd * 2);
+        float* out_buf = inp_buf + n_embd;
+
+        for (int i = start_pos; i < n_ctx; i++) {
+            const char* inp_row_data = inp_data + i * inp_st0;
+            read_row_to_float(inp_row_data, inp_dtype, inp_buf, n_embd);
+
+            rms_norm_vec_f32(inp_buf, weight_data, out_buf, n_embd);
+
+            write_row_from_float(out_buf, out_data + i * out_st0, out_dtype, n_embd);
+        }
     }
 }
 
 
 void rms_norm(const Tensor& inp, const Tensor& weight, Tensor& out, const int start_pos) {
-    const int n_embd = inp.dimsize(1);
-    GTEN_ASSERT(weight.dimsize(0) == n_embd);
-    GTEN_ASSERT(inp.is_2d() && inp.dtype() == out.dtype());
+    // const int n_embd = inp.dimsize(1);
+    // std::cout << "ne: " << n_embd << " : " << weight.dimsize(0) << "\n";
+    // GTEN_ASSERT(weight.dimsize(0) == n_embd);
+    GTEN_ASSERT(inp.dtype() == out.dtype());
     GTEN_ASSERT(weight.is_1d());
-    GTEN_ASSERT(inp.shape_eq(out.shape()));
+    // GTEN_ASSERT(inp.shape_eq(out.shape()));
 
     rms_norm_impl(inp, weight, out, start_pos);
 }
